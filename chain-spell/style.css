@@ -205,3 +205,10 @@ body.playing #timer-track   { visibility: visible; }
   from { transform: scale(0.75); opacity: 0; }
   to   { transform: scale(1);    opacity: 1; }
 }
+
+/* ── Shatter nodes ───────────────────────────────────────────────── */
+.word-node.shattering {
+  position: fixed;
+  transition: none !important;
+  pointer-events: none;
+}

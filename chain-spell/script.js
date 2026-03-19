@@ -256,24 +256,62 @@ inputEl.addEventListener('keydown', e => {
 
 // ─── 7. Game update logic (Tasks 11–12, 14, 16) ──────────────────────────────
 
-function updateShatter(dt) { /* stub — implemented fully in Task 15 */ }
+function buildShatterNodes() {
+  game.chain.forEach(entry => {
+    if (!entry.el) return;
+    const rect = entry.el.getBoundingClientRect();
+    entry.el.classList.add('shattering');
+    entry.el.style.left    = `${rect.left}px`;
+    entry.el.style.top     = `${rect.top}px`;
+    entry.el.style.transform = 'none';
+
+    game.shatterNodes.push({
+      el:      entry.el,
+      vx:      (Math.random() - 0.5) * 400,
+      vy:      (Math.random() - 0.8) * 300,
+      vr:      (Math.random() - 0.5) * 360,
+      elapsed: 0,
+    });
+    entry.el = null;
+  });
+}
+
+function updateShatter(dt) {
+  const DURATION = 0.6;
+  let allDone = true;
+
+  game.shatterNodes.forEach(n => {
+    n.elapsed += dt;
+    const t = n.elapsed;
+    const opacity = Math.max(0, 1 - t / DURATION);
+    n.el.style.transform = `translate(${n.vx * t}px, ${n.vy * t + 200 * t * t}px) rotate(${n.vr * t}deg)`;
+    n.el.style.opacity = String(opacity);
+    if (opacity > 0) allDone = false;
+  });
+
+  if (allDone && game.shatterNodes.length > 0) {
+    game.shatterNodes.forEach(n => n.el.remove());
+    game.shatterNodes = [];
+    showScoreSummary();
+  }
+}
 
 function endGame() {
   setState(STATE.OVER);
   inputEl.disabled = true;
   inputEl.blur();
+  sfxGameOver();
 
-  // Save best score
   const best = Math.max(game.score, game.best || 0);
-  game.best = best;
   localStorage.setItem('chain-spell', JSON.stringify({ best }));
+  game.best = best;
   bestEl.textContent = `BEST: ${best}`;
 
-  // Shatter added in Task 15 — stub for now: just show summary
-  if (game.chain.length === 0) {
+  if (game.chain.length === 0 || game.chain.every(e => !e.el)) {
     showScoreSummary();
   } else {
-    showScoreSummary();
+    buildShatterNodes();
+    // showScoreSummary called from updateShatter when all nodes fade out
   }
 }
 
