@@ -106,6 +106,7 @@ const summaryOverlay = document.getElementById('summary-overlay');
 const summaryScore   = document.getElementById('summary-score');
 const summaryBest    = document.getElementById('summary-best');
 const summaryDetail  = document.getElementById('summary-detail');
+const vignetteEl     = document.getElementById('vignette');
 
 const ALL_STATES = Object.values(STATE);
 
@@ -123,7 +124,7 @@ function timerCeiling(level) {
 function startGame() {
   game = defaultState();
   game.score = 0;
-  bgSquares = [];
+  bgLayers = [[], []];
   // Load best score
   const saved = JSON.parse(localStorage.getItem('chain-spell') || '{}');
   game.best = saved.best || 0;
@@ -178,8 +179,17 @@ function acceptWord(word) {
   } else {
     sfxAccept();
   }
-  addWordNode(word);        // added in Task 7
+  addWordNode(word);
   updateInputLabel();
+
+  // Visual: burst + score pop at input position
+  const pts = word.length * SCORE_PER_CHAR;
+  const burstHue = didLevelUp ? 50 : 210;
+  const inputRect = inputEl.getBoundingClientRect();
+  const bx = inputRect.left + inputRect.width / 2;
+  const by = inputRect.top;
+  spawnBurst(bx, by, burstHue);
+  spawnScorePop(bx, by, pts);
 }
 
 function triggerLevelUp() {
@@ -448,8 +458,8 @@ function addWordNode(word) {
 
   // Measure actual width then shift all older nodes left
   requestAnimationFrame(() => {
-    const nodeW = el.offsetWidth;
-    const shift = nodeW + NODE_GAP;
+    const prevW = prev && prev.el ? prev.el.offsetWidth : el.offsetWidth;
+    const shift = prevW + NODE_GAP;
 
     // Shift all nodes except the new one
     game.chain.slice(0, -1).forEach((chainEntry, idx) => {
@@ -488,11 +498,71 @@ function loop(ts) {
   requestAnimationFrame(loop);
 }
 
-// ─── Background squares ────────────────────────────────────────────────────────
+// ─── Burst particles ──────────────────────────────────────────────────────────
+let burstParticles = [];
+
+function spawnBurst(x, y, hue) {
+  const count = 10 + Math.floor(Math.random() * 6);
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 60 + Math.random() * 220;
+    burstParticles.push({
+      x, y,
+      vx:      Math.cos(angle) * speed,
+      vy:      Math.sin(angle) * speed - 40,  // slight upward bias
+      size:    2 + Math.random() * 4,
+      elapsed: 0,
+      life:    0.45 + Math.random() * 0.25,
+      hue,
+    });
+  }
+}
+
+function updateBurst(dt) {
+  for (const p of burstParticles) {
+    p.elapsed += dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vy += 320 * dt; // gravity
+  }
+  burstParticles = burstParticles.filter(p => p.elapsed < p.life);
+}
+
+function renderBurst() {
+  for (const p of burstParticles) {
+    const t = p.elapsed / p.life;
+    bgCtx.globalAlpha = (1 - t) * 0.85;
+    bgCtx.fillStyle   = `hsl(${p.hue}, 85%, 65%)`;
+    const sz = p.size * (1 - t * 0.5);
+    bgCtx.fillRect(p.x - sz / 2, p.y - sz / 2, sz, sz);
+  }
+  bgCtx.globalAlpha = 1;
+}
+
+// ─── Floating score pops ──────────────────────────────────────────────────────
+function spawnScorePop(x, y, pts) {
+  const el = document.createElement('div');
+  el.className = 'score-pop';
+  el.textContent = `+${pts}`;
+  // Centre the pop over the spawn point
+  el.style.left = `${x}px`;
+  el.style.top  = `${y}px`;
+  el.style.transform = 'translateX(-50%)';
+  document.body.appendChild(el);
+  el.addEventListener('animationend', () => el.remove(), { once: true });
+}
+
+// ─── Background squares (two parallax layers) ─────────────────────────────────
 const bgCanvas = document.getElementById('bg-canvas');
 const bgCtx    = bgCanvas.getContext('2d');
-let bgSquares    = [];
-let bgSpawnTimer = 0;
+// Layer 0: far (slow, small, faint)   Layer 1: near (fast, large, brighter)
+let bgLayers     = [[], []];
+let bgSpawnTimer = [0, 0];
+
+const BG_LAYER = [
+  { speedMult: 0.35, sizeMin: 3,  sizeMax: 10, opacityMin: 0.04, opacityMax: 0.07, interval: 0.18 },
+  { speedMult: 1.0,  sizeMin: 6,  sizeMax: 26, opacityMin: 0.07, opacityMax: 0.17, interval: 0.14 },
+];
 
 function resizeBgCanvas() {
   bgCanvas.width  = window.innerWidth;
@@ -504,21 +574,24 @@ resizeBgCanvas();
 function updateBg(dt) {
   const baseSpeed = Math.min(1400, 280 + game.level * 70);
 
-  bgSpawnTimer -= dt;
-  if (bgSpawnTimer <= 0) {
-    bgSpawnTimer = 0.15;
-    const size = 5 + Math.random() * 22;
-    bgSquares.push({
-      x:       bgCanvas.width + size,
-      y:       Math.random() * bgCanvas.height,
-      size,
-      vx:      baseSpeed * (0.5 + Math.random() * 0.7),
-      opacity: 0.07 + Math.random() * 0.11,
-    });
-  }
+  updateBurst(dt);
 
-  for (const s of bgSquares) s.x -= s.vx * dt;
-  bgSquares = bgSquares.filter(s => s.x + s.size > 0);
+  BG_LAYER.forEach((cfg, li) => {
+    bgSpawnTimer[li] -= dt;
+    if (bgSpawnTimer[li] <= 0) {
+      bgSpawnTimer[li] = cfg.interval;
+      const size = cfg.sizeMin + Math.random() * (cfg.sizeMax - cfg.sizeMin);
+      bgLayers[li].push({
+        x:       bgCanvas.width + size,
+        y:       Math.random() * bgCanvas.height,
+        size,
+        vx:      baseSpeed * cfg.speedMult * (0.6 + Math.random() * 0.7),
+        opacity: cfg.opacityMin + Math.random() * (cfg.opacityMax - cfg.opacityMin),
+      });
+    }
+    for (const s of bgLayers[li]) s.x -= s.vx * dt;
+    bgLayers[li] = bgLayers[li].filter(s => s.x + s.size > 0);
+  });
 }
 
 function renderBg() {
@@ -527,24 +600,26 @@ function renderBg() {
 
   let hue, sat, lit;
   if (game.state === STATE.OVER) {
-    hue = 0; sat = 80; lit = 60; // red
+    hue = 0; sat = 80; lit = 60;
   } else if (game.state === STATE.PLAYING || game.state === STATE.LEVELUP) {
     const remaining = game.timerEnd - performance.now();
-    if (remaining <= 3000 && remaining > 0) {
-      hue = 40; sat = 90; lit = 60; // yellow
-    } else {
-      hue = 210; sat = 90; lit = 65; // blue
-    }
+    hue = (remaining <= 3000 && remaining > 0) ? 40 : 210;
+    sat = 90; lit = 65;
   } else {
-    hue = 210; sat = 90; lit = 65; // blue (IDLE)
+    hue = 210; sat = 90; lit = 65;
   }
 
-  for (const s of bgSquares) {
-    bgCtx.globalAlpha = s.opacity;
-    bgCtx.fillStyle   = `hsl(${hue}, ${sat}%, ${lit}%)`;
-    bgCtx.fillRect(s.x, s.y, s.size, s.size);
+  // Draw far layer first, then near layer on top
+  for (const layer of bgLayers) {
+    for (const s of layer) {
+      bgCtx.globalAlpha = s.opacity;
+      bgCtx.fillStyle   = `hsl(${hue}, ${sat}%, ${lit}%)`;
+      bgCtx.fillRect(s.x, s.y, s.size, s.size);
+    }
   }
   bgCtx.globalAlpha = 1;
+
+  renderBurst();
 }
 
 function update(dt) {
@@ -592,6 +667,14 @@ function render() {
     } else {
       timerBarEl.style.background = 'var(--error)';
     }
+
+    // Vignette closes in as timer drains: starts at 40% fill, maxes at 0% (empty)
+    const vignetteT = Math.max(0, Math.min(1, (0.4 - fill) / 0.4));
+    vignetteEl.style.opacity = String(vignetteT * 0.75);
+  } else if (game.state === STATE.OVER) {
+    vignetteEl.style.opacity = '0.75';
+  } else {
+    vignetteEl.style.opacity = '0';
   }
 
   // Score lerp — animated counter
