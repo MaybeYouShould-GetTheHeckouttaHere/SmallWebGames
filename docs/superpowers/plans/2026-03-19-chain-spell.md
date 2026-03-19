@@ -549,7 +549,8 @@ function setState(next) {
 }
 
 function timerCeiling(level) {
-  return Math.max(MIN_TIMER_MS, BASE_TIMER_MS - (level - 1) * TIMER_STEP_MS);
+  return Math.max(MIN_TIMER_MS, BASE_TIMER_MS - level * TIMER_STEP_MS);
+  // spec: max(5000, 15000 - level*500) → level 1 = 14500ms, level 2 = 14000ms
 }
 
 function startGame() {
@@ -1037,7 +1038,7 @@ In `acceptWord`, replace the comment `// Level-up overlay fired in Task 11` with
 triggerLevelUp();
 ```
 
-- [ ] **Step 5: Verify** — Type 5 words. "LEVEL 2" overlay appears with a pop animation, then dismisses. Timer resets to 14.5s (ceiling at level 2). After 5 more words, "LEVEL 3" overlay. Timer at level 20+ holds at 5s minimum.
+- [ ] **Step 5: Verify** — Type 5 words. "LEVEL 2" overlay appears with a pop animation, then dismisses. Timer resets to 14s (ceiling at level 2: `15000 - 2×500`). After 5 more words, "LEVEL 3" overlay with 13.5s ceiling. Timer at level 20+ holds at 5s minimum.
 
 - [ ] **Step 6: Commit**
 
@@ -1369,19 +1370,21 @@ function showScoreSummary() {
 - [ ] **Step 4: Add restart handler**
 
 ```js
-document.addEventListener('keydown', e => {
-  if (game.state === STATE.OVER && game.shatterNodes.length === 0) {
-    summaryOverlay.classList.remove('active');
-    startGame();
-  }
-});
+function cancelShatter() {
+  // Cancel mid-flight shatter: remove all nodes immediately and clear the array
+  game.shatterNodes.forEach(n => { if (n.el) n.el.remove(); });
+  game.shatterNodes = [];
+  summaryOverlay.classList.remove('active');
+}
 
-summaryOverlay.addEventListener('click', () => {
-  if (game.state === STATE.OVER && game.shatterNodes.length === 0) {
-    summaryOverlay.classList.remove('active');
-    startGame();
-  }
-});
+function tryRestart() {
+  if (game.state !== STATE.OVER) return;
+  cancelShatter(); // safe to call even if shatter is already done
+  startGame();
+}
+
+document.addEventListener('keydown', () => tryRestart());
+summaryOverlay.addEventListener('click', () => tryRestart());
 ```
 
 - [ ] **Step 5: Verify** — Let the game end. After shatter completes, the summary overlay fades in with score, best, level, and word count. Press any key → overlay disappears, game resets to IDLE. "CHAIN SPELL" title reappears. Input is re-enabled and focused.
