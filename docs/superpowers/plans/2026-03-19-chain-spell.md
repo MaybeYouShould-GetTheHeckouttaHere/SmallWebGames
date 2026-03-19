@@ -741,10 +741,9 @@ function addWordNode(word) {
 
     // Draw connector after entry animation settles (Task 9)
     el.addEventListener('transitionend', function onSettle(e) {
-      if (e.propertyName !== 'transform' || e.target !== el) return;
-      el.removeEventListener('transitionend', onSettle);
+      if (e.propertyName !== 'transform') return;
       drawConnector(prev, entry);
-    });
+    }, { once: true });
   });
 }
 ```
