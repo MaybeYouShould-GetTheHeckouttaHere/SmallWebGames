@@ -17,9 +17,12 @@ A word-chain typing game where each new word must start with the last letter of 
 
 - Player types a word into a text input and presses Enter to submit.
 - Valid submission: word exists in dictionary, starts with the required letter (last letter of the most recent word), has not been used in this game.
-- On valid submission: word is added to the chain, timer resets (+ bonus time), score increases.
-- On invalid submission: input shakes, red border flash, no score penalty — time continues draining.
+- **First word:** no letter constraint — `requiredLetter` is empty at game start. Any valid dictionary word starts the chain. Timer begins at the level-1 ceiling (15s) when `startGame()` is called.
+- On valid submission: word is added to the chain, timer is reset to the current level ceiling then bonus seconds are added on top (`+word.length × 0.5s`); time can briefly exceed the ceiling and that is intentional — it rewards longer words.
+- On invalid submission (wrong letter or not in dictionary): input shakes, **red** border flash, no score penalty — time continues draining.
+- On already-used word submission: input shakes, **amber** border flash — visually distinct from wrong-letter errors; audio is also distinct (see Audio section).
 - Timer reaches zero: game over, shatter animation, score summary.
+- **Restart from OVER:** any keypress or tap during `STATE.OVER` triggers restart. If the shatter animation is still running, cancel it immediately (stop the animation loop, remove all shatter DOM nodes), clear the chain field, and call `startGame()`. The implementer does not need a separate restart button — the existing global keydown listener suffices.
 
 ### Dictionary
 
@@ -28,14 +31,26 @@ Embedded as `const WORDS = new Set([...])` — ~20k common English words inlined
 ### Scoring
 
 - `+word.length × 10` points per accepted word.
-- Bonus time on valid submission: `+word.length × 0.5` seconds added on top of the timer reset.
+- Bonus time on valid submission: timer is first reset to the current level ceiling, then `+word.length × 0.5` seconds are added. Time can exceed the ceiling; this is intentional.
 
 ### Level Progression
 
 - Every 5 correct words triggers a level-up.
 - Timer ceiling per level: `max(5000, 15000 - level × 500)` ms (tightens by 0.5s per level, floors at 5s).
-- Level-up shows a brief overlay: "LEVEL {n}" with scale-in animation (~800ms), then dismisses and restarts the timer.
+- Level-up transitions to `STATE.LEVELUP`. The timer is frozen (the game loop does not evaluate `timerEnd`) while in this state. The overlay shows "LEVEL {n}" with scale-in animation (~800ms), then dismisses: `setState(STATE.PLAYING)`, set `timerEnd = performance.now() + newCeiling`, set `timerDuration = newCeiling`.
 - Level is the only difficulty axis.
+
+---
+
+## Idle / Start Screen
+
+During `STATE.IDLE`:
+- Chain field is empty.
+- The game title "CHAIN SPELL" is displayed centered in the chain field area, large, in the accent blue color, with a gentle opacity pulse animation.
+- Input zone shows a one-line instruction beneath the input: `"type any word to begin"`.
+- No timer bar is shown (or it is hidden).
+- Player starts the game by typing any word into the input and pressing Enter. The first valid dictionary word starts the chain and transitions to `STATE.PLAYING`.
+- No separate "Start" button — the input itself is the entry point.
 
 ---
 
@@ -55,6 +70,7 @@ Embedded as `const WORDS = new Set([...])` — ~20k common English words inlined
 | Text | `#f5f5f5` |
 | Accent (blue) | `hsl(210, 90%, 65%)` |
 | Error flash | `hsl(0, 80%, 60%)` |
+| Duplicate flash (amber) | `hsl(40, 90%, 60%)` |
 | Faded chain history | `rgba(245,245,245,0.2)` at furthest |
 
 ### Layout Zones
@@ -63,7 +79,7 @@ Embedded as `const WORDS = new Set([...])` — ~20k common English words inlined
 
 **Chain field** — middle 60% of screen height. Single horizontal baseline, vertically centered. Words scroll left; the newest word anchors near center-right.
 
-**Input zone** — bottom quarter. Large, clean text input. Dim placeholder shows the required starting letter. A small label below reads: `next word must start with —`.
+**Input zone** — bottom quarter. Large, clean text input. Dim placeholder shows the required starting letter. A small label below reads: `next word must start with —`. During IDLE, this label reads the game title and a one-line instruction instead.
 
 ### Timer Bar
 
@@ -77,9 +93,10 @@ Embedded as `const WORDS = new Set([...])` — ~20k common English words inlined
 
 ### Word Nodes
 
-- Each accepted word is an absolutely positioned `<div class="word-node">`.
-- On new word accepted: existing nodes translate left by `(newWordWidth + gap)` via `transform: translateX`. GPU-composited, no reflow.
-- New word enters: `translateX(120px) → translateX(0)` + `opacity 0 → 1`, ~200ms ease-out.
+- Each accepted word is an absolutely positioned `<div class="word-node">` inside the chain field container (`position: relative`).
+- The newest word is always anchored near **65% of the container width** (its `left` is set to this value). All older nodes are offset left from there via their own cumulative `transform: translateX(−Npx)`, where N grows with each new word added. Each node maintains its own translateX; there is no shared wrapper.
+- On new word accepted: all existing nodes increase their `translateX` by `-(newWordWidth + gap)` (shifting left). GPU-composited, no reflow.
+- New word enters at `left: 65% + 120px` then transitions `translateX(120px) → translateX(0)` + `opacity 0 → 1`, ~200ms ease-out.
 - **Opacity fade:** words 1–3 positions back fade proportionally toward 20% opacity. Chain reads as a trail.
 - **Bold/regular:** newest word is bold; all others regular weight.
 
@@ -92,7 +109,7 @@ Embedded as `const WORDS = new Set([...])` — ~20k common English words inlined
 ### SVG Connector Paths
 
 - SVG overlay: same dimensions as chain field, `pointer-events: none`, sits behind word nodes.
-- After each new word settles, a `<path>` is drawn from the last letter of the previous word to the first letter of the new one.
+- After each new word's entry animation completes, read screen coordinates via `getBoundingClientRect()` on the last-letter `<span>` of the previous word and the first-letter `<span>` of the new word, then draw or update a `<path>` between those points. Listen for `transitionend` on the new node filtered to `e.propertyName === 'transform' && e.target === newNode` to avoid double-firing (opacity also fires `transitionend`) and to avoid catching the leftward-scroll transition on older nodes.
 - Shape: cubic bezier curving upward slightly.
 - Style: blue accent stroke, 1.5px, ~40% opacity. Connective tissue, not a feature.
 
@@ -115,9 +132,10 @@ Dims chain field, shows "LEVEL {n}" in large text with `scale(0.8) → scale(1)`
 ### Shatter (Game Over)
 
 On timer expiry:
-- Each word node receives a random velocity vector.
+- The existing `.word-node` divs are re-used as shatter objects — no cloning. They are set to `position: fixed` with their current screen coordinates so they detach from flow.
+- Each node receives a random velocity vector (stored in `game.shatterNodes`).
 - JS-driven each frame: `translate(vx*t, vy*t) rotate(r*t)` + `opacity` fading to 0 over ~600ms.
-- Once all nodes are invisible, score summary fades in.
+- Once all nodes reach opacity 0, they are removed from the DOM and the score summary fades in.
 
 ### Score Counter
 
@@ -125,8 +143,9 @@ On accepted word, score counts up via lerp over ~300ms in the render loop. The n
 
 ### Input Feedback
 
-- Valid: input clears, blue border flash.
-- Invalid: horizontal shake oscillation (~200ms), red border flash.
+- Valid: input clears, brief blue border flash.
+- Invalid (wrong letter / not in dictionary): horizontal shake oscillation (~200ms), red border flash.
+- Already used: horizontal shake oscillation (~200ms), amber border flash — visually distinct from invalid.
 
 ---
 
@@ -137,17 +156,17 @@ const STATE = { IDLE: 'idle', PLAYING: 'playing', LEVELUP: 'levelup', OVER: 'ove
 
 game = {
   state: STATE.IDLE,
-  chain: [{ word, x }],       // accepted words + their DOM x positions
+  chain: [{ word }],           // accepted words in order; DOM positions are read via getBoundingClientRect() at render time, not stored
   usedWords: new Set(),
-  requiredLetter: '',          // last letter of most recent word
+  requiredLetter: '',          // last letter of most recent word; empty string = no constraint (first word)
   score: 0,
   displayScore: 0,             // lerped toward score for animated counter
   level: 1,
   wordsThisLevel: 0,           // resets on level-up
-  timerEnd: 0,                 // performance.now() when timer expires
-  timerDuration: 0,            // ms allotted for current word
+  timerEnd: 0,                 // performance.now() when timer expires; set whenever a word is accepted or level-up resumes
+  timerDuration: 0,            // ms allotted for current word; always updated together with timerEnd so the bar ratio stays correct across level-ups
   levelingUp: false,
-  shatterParticles: [],        // word nodes mid-shatter
+  shatterNodes: [],            // { el, vx, vy, vr, t } — existing .word-node DOM elements mid-shatter with velocity vectors
 }
 ```
 
