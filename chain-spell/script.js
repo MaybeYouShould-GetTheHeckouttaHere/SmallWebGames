@@ -516,7 +516,8 @@ function updateBg(dt) {
 }
 
 function renderBg() {
-  bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+  bgCtx.fillStyle = '#0d0d0f';
+  bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
 
   let hue, sat, lit;
   if (game.state === STATE.OVER) {
