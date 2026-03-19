@@ -367,36 +367,42 @@ function pruneNodes() {
   }
 }
 
-function drawConnector(prev, curr) {
-  if (!prev || !prev.el || !curr || !curr.el) return;
+function renderConnectors() {
+  const svgRect = svgOverlay.getBoundingClientRect();
 
-  const prevSpans = prev.el.querySelectorAll('span');
-  const currSpans = curr.el.querySelectorAll('span');
-  const fromSpan = prevSpans[prevSpans.length - 1];
-  const toSpan = currSpans[0];
-  if (!fromSpan || !toSpan) return;
+  for (let i = 0; i < game.chain.length - 1; i++) {
+    const from = game.chain[i];
+    const to   = game.chain[i + 1];
+    if (!from.el || !to.el) continue;
 
-  const svgRect  = svgOverlay.getBoundingClientRect();
-  const fromRect = fromSpan.getBoundingClientRect();
-  const toRect   = toSpan.getBoundingClientRect();
+    const fromSpan = from.el.querySelector('span:last-child');
+    const toSpan   = to.el.querySelector('span');
+    if (!fromSpan || !toSpan) continue;
 
-  const x1 = fromRect.right  - svgRect.left;
-  const y1 = fromRect.top + fromRect.height / 2 - svgRect.top;
-  const x2 = toRect.left    - svgRect.left;
-  const y2 = toRect.top  + toRect.height  / 2 - svgRect.top;
+    const fromRect = fromSpan.getBoundingClientRect();
+    const toRect   = toSpan.getBoundingClientRect();
 
-  const cpY = Math.min(y1, y2) - 20;
-  const d = `M ${x1} ${y1} C ${x1} ${cpY}, ${x2} ${cpY}, ${x2} ${y2}`;
+    const x1 = fromRect.right  - svgRect.left;
+    const y1 = fromRect.top + fromRect.height / 2 - svgRect.top;
+    const x2 = toRect.left    - svgRect.left;
+    const y2 = toRect.top + toRect.height  / 2 - svgRect.top;
 
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', d);
-  path.setAttribute('stroke', 'hsl(210, 90%, 65%)');
-  path.setAttribute('stroke-width', '1.5');
-  path.setAttribute('fill', 'none');
-  path.setAttribute('opacity', '0.4');
-  path.dataset.pair = `${prev.el.dataset.id}-${curr.el.dataset.id}`;
+    const cpY = Math.min(y1, y2) - 20;
+    const d   = `M ${x1} ${y1} C ${x1} ${cpY}, ${x2} ${cpY}, ${x2} ${y2}`;
 
-  svgOverlay.appendChild(path);
+    const pairKey = `${from.el.dataset.id}-${to.el.dataset.id}`;
+    let path = svgOverlay.querySelector(`path[data-pair="${pairKey}"]`);
+    if (!path) {
+      path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('stroke', 'hsl(210, 90%, 65%)');
+      path.setAttribute('stroke-width', '1.5');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('opacity', '0.4');
+      path.dataset.pair = pairKey;
+      svgOverlay.appendChild(path);
+    }
+    path.setAttribute('d', d);
+  }
 }
 
 let nodeIdCounter = 0;
@@ -467,11 +473,7 @@ function addWordNode(word) {
     el.style.transform = `translateX(0) translateY(-50%)`;
     el.style.opacity = '1';
 
-    // Draw connector after entry animation completes
-    el.addEventListener('transitionend', function onSettle(e) {
-      if (e.propertyName !== 'transform') return;
-      drawConnector(prev, entry);
-    }, { once: true });
+    // Connectors are redrawn every frame in renderConnectors() — no transitionend needed
   });
 }
 
@@ -575,6 +577,7 @@ function update(dt) {
 
 function render() {
   renderBg();
+  renderConnectors();
 
   // Timer bar — only during PLAYING
   if (game.state === STATE.PLAYING) {
