@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chain Spell</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Top bar -->
+  <div id="top-bar">
+    <div id="score-wrap">
+      <div id="score">0</div>
+      <div id="best">BEST: 0</div>
+    </div>
+    <div id="level-badge">LVL 1</div>
+    <div id="timer-track">
+      <div id="timer-bar"></div>
+    </div>
+  </div>
+
+  <!-- Chain field -->
+  <div id="chain-field">
+    <div id="title-display">CHAIN SPELL</div>
+    <svg id="connector-svg" aria-hidden="true"></svg>
+  </div>
+
+  <!-- Input zone -->
+  <div id="input-zone">
+    <input id="word-input" type="text" autocomplete="off" autocorrect="off"
+           autocapitalize="off" spellcheck="false" placeholder="type any word…">
+    <div id="input-label">type any word to begin</div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
