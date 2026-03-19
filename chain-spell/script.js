@@ -102,6 +102,10 @@ const chainField  = document.getElementById('chain-field');
 const svgOverlay  = document.getElementById('connector-svg');
 const levelupOverlay = document.getElementById('levelup-overlay');
 const levelupText    = document.getElementById('levelup-text');
+const summaryOverlay = document.getElementById('summary-overlay');
+const summaryScore   = document.getElementById('summary-score');
+const summaryBest    = document.getElementById('summary-best');
+const summaryDetail  = document.getElementById('summary-detail');
 
 const ALL_STATES = Object.values(STATE);
 
@@ -315,7 +319,31 @@ function endGame() {
   }
 }
 
-function showScoreSummary() { /* stub — Task 16 */ }
+function showScoreSummary() {
+  const wordCount = game.chain.length;
+  summaryScore.textContent  = game.score;
+  summaryBest.textContent   = `BEST: ${game.best}`;
+  summaryDetail.textContent = `LEVEL ${game.level} · ${wordCount} WORD${wordCount !== 1 ? 'S' : ''}`;
+  summaryOverlay.style.animation = 'none';
+  void summaryOverlay.offsetWidth;
+  summaryOverlay.style.animation = '';
+  summaryOverlay.classList.add('active');
+}
+
+function cancelShatter() {
+  game.shatterNodes.forEach(n => { if (n.el) n.el.remove(); });
+  game.shatterNodes = [];
+  summaryOverlay.classList.remove('active');
+}
+
+function tryRestart() {
+  if (game.state !== STATE.OVER) return;
+  cancelShatter();
+  startGame();
+}
+
+document.addEventListener('keydown', () => tryRestart());
+summaryOverlay.addEventListener('click', () => tryRestart());
 
 // ─── 8. Render logic (Tasks 7–10) ────────────────────────────────────────────
 function pruneNodes() {

@@ -212,3 +212,29 @@ body.playing #timer-track   { visibility: visible; }
   transition: none !important;
   pointer-events: none;
 }
+
+/* ── Score summary overlay ───────────────────────────────────────── */
+#summary-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(13,13,15,0.92);
+  animation: fade-in 0.4s ease both;
+}
+#summary-overlay.active { display: flex; }
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+#summary-label   { font-size: 0.75rem; letter-spacing: 0.15em; color: var(--muted); }
+#summary-score   { font-size: clamp(3rem, 10vw, 5rem); font-weight: 700; }
+#summary-best    { font-size: 0.9rem; color: var(--muted); }
+#summary-detail  { font-size: 0.75rem; color: var(--muted); letter-spacing: 0.08em; margin-top: 4px; }
+#summary-restart { font-size: 0.7rem; color: var(--accent); letter-spacing: 0.1em; margin-top: 24px; }
