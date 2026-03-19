@@ -173,6 +173,29 @@ inputEl.addEventListener('keydown', e => {
 
 // ─── 7. Game update logic (Tasks 11–12, 14, 16) ──────────────────────────────
 
+function updateShatter(dt) { /* stub — implemented fully in Task 15 */ }
+
+function endGame() {
+  setState(STATE.OVER);
+  inputEl.disabled = true;
+  inputEl.blur();
+
+  // Save best score
+  const best = Math.max(game.score, game.best || 0);
+  game.best = best;
+  localStorage.setItem('chain-spell', JSON.stringify({ best }));
+  bestEl.textContent = `BEST: ${best}`;
+
+  // Shatter added in Task 15 — stub for now: just show summary
+  if (game.chain.length === 0) {
+    showScoreSummary();
+  } else {
+    showScoreSummary();
+  }
+}
+
+function showScoreSummary() { /* stub — Task 16 */ }
+
 // ─── 8. Render logic (Tasks 7–10) ────────────────────────────────────────────
 function pruneNodes() {
   const containerRect = chainField.getBoundingClientRect();
@@ -308,7 +331,21 @@ function loop(ts) {
   requestAnimationFrame(loop);
 }
 
-function update(dt) { /* filled in later */ }
+function update(dt) {
+  // Shatter physics run during STATE.OVER — must check BEFORE the STATE.PLAYING guard
+  if (game.state === STATE.OVER && game.shatterNodes.length > 0) {
+    updateShatter(dt);
+    return;
+  }
+
+  if (game.state !== STATE.PLAYING) return;
+
+  // Timer expiry
+  if (performance.now() >= game.timerEnd) {
+    endGame();
+    return;
+  }
+}
 
 function render() {
   // Timer bar — only during PLAYING
