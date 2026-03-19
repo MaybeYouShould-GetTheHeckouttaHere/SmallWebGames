@@ -174,7 +174,128 @@ inputEl.addEventListener('keydown', e => {
 // ─── 7. Game update logic (Tasks 11–12, 14, 16) ──────────────────────────────
 
 // ─── 8. Render logic (Tasks 7–10) ────────────────────────────────────────────
-function addWordNode(word) { /* stub — Task 7 */ }
+function pruneNodes() {
+  const containerRect = chainField.getBoundingClientRect();
+  // Never prune the two most recent entries — connector for [n-2, n-1] may not be drawn yet
+  const pruneUpTo = game.chain.length - 2;
+
+  for (let i = 0; i < pruneUpTo; i++) {
+    const entry = game.chain[i];
+    if (!entry.el) continue;
+    const nodeRect = entry.el.getBoundingClientRect();
+    if (nodeRect.right < containerRect.left - PRUNE_MARGIN) {
+      const id = entry.el.dataset.id;
+      svgOverlay.querySelectorAll(`path[data-pair^="${id}-"], path[data-pair$="-${id}"]`)
+        .forEach(p => p.remove());
+      entry.el.remove();
+      entry.el = null;
+    }
+  }
+}
+
+function drawConnector(prev, curr) {
+  if (!prev || !prev.el || !curr || !curr.el) return;
+
+  const prevSpans = prev.el.querySelectorAll('span');
+  const currSpans = curr.el.querySelectorAll('span');
+  const fromSpan = prevSpans[prevSpans.length - 1];
+  const toSpan = currSpans[0];
+  if (!fromSpan || !toSpan) return;
+
+  const svgRect  = svgOverlay.getBoundingClientRect();
+  const fromRect = fromSpan.getBoundingClientRect();
+  const toRect   = toSpan.getBoundingClientRect();
+
+  const x1 = fromRect.right  - svgRect.left;
+  const y1 = fromRect.top + fromRect.height / 2 - svgRect.top;
+  const x2 = toRect.left    - svgRect.left;
+  const y2 = toRect.top  + toRect.height  / 2 - svgRect.top;
+
+  const cpY = Math.min(y1, y2) - 20;
+  const d = `M ${x1} ${y1} C ${x1} ${cpY}, ${x2} ${cpY}, ${x2} ${y2}`;
+
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', d);
+  path.setAttribute('stroke', 'hsl(210, 90%, 65%)');
+  path.setAttribute('stroke-width', '1.5');
+  path.setAttribute('fill', 'none');
+  path.setAttribute('opacity', '0.4');
+  path.dataset.pair = `${prev.el.dataset.id}-${curr.el.dataset.id}`;
+
+  svgOverlay.appendChild(path);
+}
+
+let nodeIdCounter = 0;
+
+function addWordNode(word) {
+  // Prune old nodes first (before attaching transitionend to the new node)
+  pruneNodes();
+
+  const entry = game.chain[game.chain.length - 1];
+  const containerW = chainField.offsetWidth;
+  const anchorLeft = containerW * NODE_ANCHOR;
+  const ENTRY_OFFSET = 120;
+
+  // Create node element
+  const el = document.createElement('div');
+  el.className = 'word-node newest';
+  el.dataset.id = String(nodeIdCounter++);
+  el.style.left = `${anchorLeft + ENTRY_OFFSET}px`;
+  el.style.top  = '50%';
+  el.style.transform = `translateX(0) translateY(-50%)`;
+  el.style.opacity = '0';
+
+  // Wrap each letter in a span; first and last get .letter-link
+  el.innerHTML = word.split('').map((ch, i) => {
+    const isFirst = i === 0;
+    const isLast  = i === word.length - 1;
+    const cls = (isFirst || isLast) ? ' class="letter-link"' : '';
+    return `<span${cls}>${ch}</span>`;
+  }).join('');
+
+  chainField.appendChild(el);
+  entry.el = el;
+
+  // Demote previous newest node
+  const prev = game.chain.length >= 2 ? game.chain[game.chain.length - 2] : null;
+  if (prev && prev.el) {
+    prev.el.classList.remove('newest');
+  }
+
+  // Measure actual width then shift all older nodes left
+  requestAnimationFrame(() => {
+    const nodeW = el.offsetWidth;
+    const shift = nodeW + NODE_GAP;
+
+    // Shift all nodes except the new one
+    game.chain.slice(0, -1).forEach((chainEntry, idx) => {
+      if (!chainEntry.el) return;
+      chainEntry.translateX -= shift;
+      chainEntry.el.style.transform = `translateX(${chainEntry.translateX}px) translateY(-50%)`;
+      // Opacity fade: newest-1 is full, older fades toward 0.2
+      const age = game.chain.length - 1 - idx;
+      const opacity = age <= 1 ? 1 : Math.max(0.2, 1 - (age - 1) * 0.27);
+      chainEntry.el.style.opacity = String(opacity);
+    });
+
+    // Set new node to anchor position with entry offset, then animate to 0
+    entry.translateX = 0;
+    el.style.left = `${anchorLeft}px`;
+    el.style.transform = `translateX(${ENTRY_OFFSET}px) translateY(-50%)`;
+    el.style.opacity = '0';
+
+    // Force reflow then trigger transition
+    void el.offsetWidth;
+    el.style.transform = `translateX(0) translateY(-50%)`;
+    el.style.opacity = '1';
+
+    // Draw connector after entry animation completes
+    el.addEventListener('transitionend', function onSettle(e) {
+      if (e.propertyName !== 'transform') return;
+      drawConnector(prev, entry);
+    }, { once: true });
+  });
+}
 
 // ─── 9. Game loop ─────────────────────────────────────────────────────────────
 let lastTime = 0;
@@ -188,7 +309,30 @@ function loop(ts) {
 }
 
 function update(dt) { /* filled in later */ }
-function render()   { /* filled in later */ }
+
+function render() {
+  // Timer bar — only during PLAYING
+  if (game.state === STATE.PLAYING) {
+    const remaining = game.timerEnd - performance.now();
+    const fill = Math.max(0, Math.min(1, remaining / game.timerDuration));
+    timerBarEl.style.transform = `scaleX(${fill})`;
+
+    if (fill > 0.5) {
+      timerBarEl.style.background = 'var(--text)';
+    } else if (fill > 0.25) {
+      timerBarEl.style.background = `hsl(40, 90%, ${50 + fill * 40}%)`;
+    } else {
+      timerBarEl.style.background = 'var(--error)';
+    }
+  }
+
+  // Score lerp — animated counter
+  if (game.displayScore !== game.score) {
+    game.displayScore += (game.score - game.displayScore) * 0.15;
+    if (Math.abs(game.score - game.displayScore) < 1) game.displayScore = game.score;
+    scoreEl.textContent = Math.floor(game.displayScore);
+  }
+}
 
 // ─── 10. Init ─────────────────────────────────────────────────────────────────
 startGame();

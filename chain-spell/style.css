@@ -163,3 +163,20 @@ body.playing #title-display { display: none; }
 body.playing #top-bar       { opacity: 1; }
 body.playing #level-badge   { display: block; }
 body.playing #timer-track   { visibility: visible; }
+
+/* ── Word nodes ──────────────────────────────────────────────────── */
+.word-node {
+  position: absolute;
+  top: 50%;
+  white-space: nowrap;
+  font-size: clamp(1.4rem, 3.5vw, 2.2rem);
+  font-weight: 400;
+  color: var(--text);
+  pointer-events: none;
+  transition: transform 0.2s ease-out, opacity 0.2s ease-out;
+  will-change: transform, opacity;
+}
+
+.word-node.newest { font-weight: 700; }
+
+.word-node .letter-link { color: var(--accent); }
