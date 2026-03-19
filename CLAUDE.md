@@ -354,6 +354,37 @@ if (!selectedModifiers.noGracePeriod) {
 ### Copying a multiplier without verifying its direction
 When one modifier tightens a window (×0.5) and another widens it (×1.5), copy-pasting the tight branch for the wide one silently reverses the effect. `getTimingGood` had `×0.5` for `dizziness` copied from `hardTiming`, contradicting the modifier's stated ×1.5 widening. After writing any modifier multiplier, verify: does *smaller* mean harder or easier for this specific value?
 
+### `document.body.className = next` destroys all non-state body classes
+Assigning `document.body.className = stateString` wipes every class on `<body>` and replaces it with one. Any transient effect class (shake, modifier indicator, accessibility toggle) is silently destroyed on every state transition. Use `classList` to swap only the known state tokens:
+```js
+const ALL_STATES = Object.values(STATE);
+function setState(next) {
+  game.state = next;
+  document.body.classList.remove(...ALL_STATES);
+  document.body.classList.add(next);
+}
+```
+
+### Playing sibling sounds without gating causes audio bleed
+When a word triggers a level-up, both `sfxAccept` and `sfxLevelUp` fired simultaneously — the blip muddied the fanfare's opening notes. Always gate: on level-up words, skip `sfxAccept` and let `sfxLevelUp` stand alone.
+
+### Placing overlay elements after `<script>` tags
+A `<div id="levelup-overlay">` added after `<script src="script.js">` causes `getElementById('levelup-overlay')` to return `null` — the script runs synchronously before the element is parsed. Always place overlay markup **before** the script tag.
+
+### `flashInput` setTimeout without a stored handle races on rapid input
+Without storing the `setTimeout` return value, a second flash call scheduled before the first timeout fires will strip the new flash class 350ms after the *previous* call started. Store the handle; cancel before scheduling:
+```js
+let flashTimer = null;
+function flashInput(type) {
+  if (flashTimer !== null) { clearTimeout(flashTimer); flashTimer = null; }
+  // ...add classes...
+  flashTimer = setTimeout(() => { /* remove classes */ flashTimer = null; }, 350);
+}
+```
+
+### All persistent state fields must be in `defaultState()`
+Any field added to `game` outside of `defaultState()` (e.g., `game.best = 0` bolted on in `startGame`) creates a shape inconsistency. If any code path resets state without running the bolt-on logic, the field is undefined. Always declare every field — including `best`, `cfg`, derived thresholds — in `defaultState()`.
+
 ---
 
 ## Game Log
@@ -414,4 +445,73 @@ function resumeGame() {
 
 **Clock choice — `performance.now()` vs `audioCtx.currentTime`:**
 Use `audioCtx.currentTime` for beat scheduling. Use `performance.now()` for everything else: grace windows, click cooldowns, combo timers, UI countdowns, pause tracking. Both clocks advance in real time at the same rate; the distinction is semantic, not functional.
+
+### Chain Spell — 2026-03-19
+
+Typographic word-chain game. DOM word nodes + SVG overlay for connectors. `performance.now()` timer. Shatter on game over.
+
+**Added to Anti-patterns:** Five new patterns (className assignment destroying body classes, sibling sound bleed on level-up, overlay elements after script tag, flashInput setTimeout race, state fields outside defaultState).
+
+**Reusable pattern — DOM shatter using existing nodes:**
+On game over, re-use existing `.word-node` divs as shatter physics objects — no cloning. Capture screen position via `getBoundingClientRect`, switch to `position: fixed`, then drive per-frame with JS:
+```js
+function buildShatterNodes() {
+  game.chain.forEach(entry => {
+    if (!entry.el) return;
+    const rect = entry.el.getBoundingClientRect();
+    entry.el.classList.add('shattering'); // position: fixed; transition: none !important
+    entry.el.style.left = `${rect.left}px`;
+    entry.el.style.top  = `${rect.top}px`;
+    entry.el.style.transform = 'none';
+    game.shatterNodes.push({ el: entry.el, vx: (Math.random()-0.5)*400,
+      vy: (Math.random()-0.8)*300, vr: (Math.random()-0.5)*360, elapsed: 0 });
+    entry.el = null;
+  });
+}
+function updateShatter(dt) {
+  const DURATION = 0.6; let allDone = true;
+  game.shatterNodes.forEach(n => {
+    n.elapsed += dt;
+    const t = n.elapsed, opacity = Math.max(0, 1 - t / DURATION);
+    n.el.style.transform = `translate(${n.vx*t}px,${n.vy*t + 200*t*t}px) rotate(${n.vr*t}deg)`;
+    n.el.style.opacity = String(opacity);
+    if (opacity > 0) allDone = false;
+  });
+  if (allDone && game.shatterNodes.length > 0) {
+    game.shatterNodes.forEach(n => n.el.remove());
+    game.shatterNodes = [];
+    showScoreSummary();
+  }
+}
+```
+Call `updateShatter` BEFORE the `STATE.PLAYING` guard in `update()` — shatter runs during `STATE.OVER`.
+
+**Reusable pattern — SVG connector after transitionend:**
+Draw connectors between word nodes only after the entry animation settles. Listen for `transitionend` with `{ once: true }` filtered to `e.propertyName === 'transform'` (opacity also fires transitionend — filtering avoids double-draw):
+```js
+el.addEventListener('transitionend', function(e) {
+  if (e.propertyName !== 'transform') return;
+  drawConnector(prev, entry);
+}, { once: true });
+```
+SVG overlay has no `viewBox` — its coordinate space is CSS pixels. Subtract `svgOverlay.getBoundingClientRect()` from `getBoundingClientRect()` of the target spans to get SVG-local coordinates.
+
+**Reusable pattern — node pruning with hysteresis:**
+Remove off-screen DOM nodes once their right edge is >300px past the container's left edge. The 300px margin keeps nodes alive well past the visible area so connectors between still-visible pairs are never orphaned. Never prune the two most recent entries — the connector to the newest node may not be drawn yet:
+```js
+function pruneNodes() {
+  const containerRect = chainField.getBoundingClientRect();
+  const pruneUpTo = game.chain.length - 2; // protect newest two
+  for (let i = 0; i < pruneUpTo; i++) {
+    const entry = game.chain[i];
+    if (!entry.el) continue;
+    if (entry.el.getBoundingClientRect().right < containerRect.left - 300) {
+      const id = entry.el.dataset.id;
+      svgOverlay.querySelectorAll(`path[data-pair^="${id}-"],path[data-pair$="-${id}"]`)
+        .forEach(p => p.remove());
+      entry.el.remove(); entry.el = null;
+    }
+  }
+}
+```
 
