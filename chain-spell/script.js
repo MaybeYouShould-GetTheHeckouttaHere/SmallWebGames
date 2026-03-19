@@ -43,6 +43,8 @@ const levelEl     = document.getElementById('level-badge');
 const timerBarEl  = document.getElementById('timer-bar');
 const chainField  = document.getElementById('chain-field');
 const svgOverlay  = document.getElementById('connector-svg');
+const levelupOverlay = document.getElementById('levelup-overlay');
+const levelupText    = document.getElementById('levelup-text');
 
 const ALL_STATES = Object.values(STATE);
 
@@ -109,11 +111,30 @@ function acceptWord(word) {
     const newCeiling = timerCeiling(game.level);
     game.timerDuration = newCeiling;
     game.timerEnd = performance.now() + newCeiling;
-    // triggerLevelUp() added in Task 12
+    triggerLevelUp();
   }
 
   addWordNode(word);        // added in Task 7
   updateInputLabel();
+}
+
+function triggerLevelUp() {
+  setState(STATE.LEVELUP);
+  levelupText.textContent = `LEVEL ${game.level}`;
+  levelupText.style.animation = 'none';
+  void levelupText.offsetWidth;
+  levelupText.style.animation = '';
+  levelupOverlay.classList.add('active');
+  levelEl.textContent = `LVL ${game.level}`;
+
+  setTimeout(() => {
+    levelupOverlay.classList.remove('active');
+    const ceiling = timerCeiling(game.level);
+    game.timerDuration = ceiling;
+    game.timerEnd = performance.now() + ceiling;
+    game.lastPulseSecond = 3;
+    setState(STATE.PLAYING);
+  }, 900);
 }
 
 // ─── 6. Input handler (Task 5) ───────────────────────────────────────────────
