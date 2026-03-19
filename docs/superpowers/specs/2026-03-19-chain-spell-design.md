@@ -37,7 +37,7 @@ Embedded as `const WORDS = new Set([...])` — ~20k common English words inlined
 
 - Every 5 correct words triggers a level-up.
 - Timer ceiling per level: `max(5000, 15000 - level × 500)` ms (tightens by 0.5s per level, floors at 5s).
-- Level-up transitions to `STATE.LEVELUP`. The timer bar holds at its current visual fill while in this state (the game loop does not evaluate `timerEnd`). Record `game.levelUpPausedAt = performance.now()` on entry. The overlay shows "LEVEL {n}" with scale-in animation (~800ms), then dismisses: `setState(STATE.PLAYING)`, set `timerEnd += (performance.now() - game.levelUpPausedAt)` to compensate for the frozen time, then additionally reset to the new ceiling: `timerEnd = performance.now() + newCeiling`, `timerDuration = newCeiling`. **Bonus time earned at the triggering word is discarded** — the level-up timer reset takes precedence. This is intentional; the level-up is a hard reset, not a continuation.
+- Level-up transitions to `STATE.LEVELUP`. The timer bar holds at its current visual fill while in this state (the game loop does not evaluate `timerEnd`). The overlay shows "LEVEL {n}" with scale-in animation (~800ms), then dismisses: `setState(STATE.PLAYING)`, `timerEnd = performance.now() + newCeiling`, `timerDuration = newCeiling`. **Bonus time earned at the triggering word is discarded** — the level-up is a hard timer reset, not a continuation. The `game.levelUpPausedAt` field is not needed for timer compensation (the timer is simply replaced); it exists only if needed for other pause-sensitive fields in future.
 - Level is the only difficulty axis.
 
 ---
@@ -79,7 +79,7 @@ During `STATE.IDLE`:
 
 **Chain field** — middle 60% of screen height. Single horizontal baseline, vertically centered. Words scroll left; the newest word anchors near center-right.
 
-**Input zone** — bottom quarter. Large, clean text input. Dim placeholder shows the required starting letter. A small label below reads: `next word must start with —`. During IDLE, this label reads the game title and a one-line instruction instead.
+**Input zone** — bottom quarter. Large, clean text input. Dim placeholder shows the required starting letter. A small label below reads: `next word must start with —`. During IDLE, this label reads only the one-line instruction (`"type any word to begin"`); the game title is shown in the chain field area, not here.
 
 ### Timer Bar
 
@@ -116,8 +116,9 @@ During `STATE.IDLE`:
 
 ### Node Pruning
 
-- Word nodes whose **right edge has passed more than 300px beyond the container's left edge** are removed from the DOM along with their connector path (matched by `data-pair`). The 300px margin is a hysteresis buffer — it keeps nodes alive slightly past the visible area to avoid popping mid-scroll. Condition: `node.getBoundingClientRect().right < containerRect.left - 300`.
-- Pruning happens once per new word accepted, after the entry animation starts (before `transitionend`).
+- Pruning happens once per new word accepted, **before** the `transitionend` listener is attached to the new node. Only nodes older than one word (i.e., not the previous word, whose connector has not yet been drawn) are eligible, so there is no race between connector drawing and pruning.
+- Word nodes whose **right edge has passed more than 300px beyond the container's left edge** are removed from the DOM along with their connector path (matched by `data-pair`). The 300px margin is a hysteresis buffer — it keeps nodes alive past the visible area to avoid popping mid-scroll. Condition: `node.getBoundingClientRect().right < containerRect.left - 300`.
+- By the time a node qualifies for pruning, its connector path was already drawn on a prior word's `transitionend`. Pruning the node and removing its path is safe.
 - This prevents unbounded DOM growth during long sessions and keeps the shatter node set bounded to visible nodes only.
 
 ---
@@ -145,6 +146,17 @@ On timer expiry:
 - JS-driven each frame: `translate(vx*t, vy*t) rotate(r*t)` + `opacity` fading to 0 over ~600ms.
 - Once all nodes reach opacity 0, they are removed from the DOM and the score summary fades in.
 
+### Score Summary (`STATE.OVER`)
+
+A centered overlay fades in over the chain field. Contains (top to bottom):
+- **"GAME OVER"** — small, muted label
+- **Final score** — large, white, bold
+- **"BEST: {highScore}"** — smaller, muted, beneath the score
+- **"LEVEL {n} · {wordCount} WORDS"** — small, muted detail line
+- **"press any key to restart"** — small, accent blue, at the bottom
+
+No shatter debris remains visible behind the overlay. The input is disabled during this state and re-enabled on restart.
+
 ### Score Counter
 
 On accepted word, score counts up via lerp over ~300ms in the render loop. The number itself animates — no pop-up elements.
@@ -166,7 +178,7 @@ game = {
   state: STATE.IDLE,
   chain: [{ word }],           // accepted words in order; DOM positions are read via getBoundingClientRect() at render time, not stored
   usedWords: new Set(),
-  requiredLetter: '',          // last letter of most recent word; empty string = no constraint (first word)
+  requiredLetter: '',          // last letter of most recent word; empty string = no constraint (first word); never reset by level-up — the chain letter constraint persists across levels
   score: 0,
   displayScore: 0,             // lerped toward score for animated counter
   level: 1,
