@@ -109,9 +109,15 @@ During `STATE.IDLE`:
 ### SVG Connector Paths
 
 - SVG overlay: same dimensions as chain field, `pointer-events: none`, sits behind word nodes.
-- After each new word's entry animation completes, read screen coordinates via `getBoundingClientRect()` on the last-letter `<span>` of the previous word and the first-letter `<span>` of the new word, then draw or update a `<path>` between those points. Listen for `transitionend` on the new node filtered to `e.propertyName === 'transform' && e.target === newNode` to avoid double-firing (opacity also fires `transitionend`) and to avoid catching the leftward-scroll transition on older nodes.
+- After each new word's entry animation completes, read screen coordinates via `getBoundingClientRect()` on the last-letter `<span>` of the previous word and the first-letter `<span>` of the new word, then draw or update a `<path>` between those points. Listen for `transitionend` **attached directly to the new node** (not delegated from the container), filtered to `e.propertyName === 'transform'`, to avoid double-firing (opacity also fires `transitionend`) and to avoid catching scroll transitions on older nodes.
+- Each connector path has a `data-pair` attribute (e.g. `"2-3"`) matching the chain indices it connects. When a word node is pruned from the DOM (see below), its associated connector path is also removed by matching `data-pair`.
 - Shape: cubic bezier curving upward slightly.
 - Style: blue accent stroke, 1.5px, ~40% opacity. Connective tissue, not a feature.
+
+### Node Pruning
+
+- Word nodes more than **300px to the left of the container's left edge** (i.e., `node.getBoundingClientRect().right < containerRect.left - 300`) are removed from the DOM along with their connector path. This prevents unbounded DOM growth during long sessions and keeps the shatter node set bounded.
+- Pruning happens once per new word accepted, after the entry animation starts (before `transitionend`).
 
 ---
 
@@ -132,7 +138,8 @@ Dims chain field, shows "LEVEL {n}" in large text with `scale(0.8) → scale(1)`
 ### Shatter (Game Over)
 
 On timer expiry:
-- The existing `.word-node` divs are re-used as shatter objects — no cloning. They are set to `position: fixed` with their current screen coordinates so they detach from flow.
+- If `game.chain` is empty (player never accepted a word), skip shatter entirely — show the score summary immediately.
+- Otherwise, the existing `.word-node` divs are re-used as shatter objects — no cloning. They are set to `position: fixed` with their current screen coordinates so they detach from flow.
 - Each node receives a random velocity vector (stored in `game.shatterNodes`).
 - JS-driven each frame: `translate(vx*t, vy*t) rotate(r*t)` + `opacity` fading to 0 over ~600ms.
 - Once all nodes reach opacity 0, they are removed from the DOM and the score summary fades in.
@@ -163,8 +170,9 @@ game = {
   displayScore: 0,             // lerped toward score for animated counter
   level: 1,
   wordsThisLevel: 0,           // resets on level-up
-  timerEnd: 0,                 // performance.now() when timer expires; set whenever a word is accepted or level-up resumes
-  timerDuration: 0,            // ms allotted for current word; always updated together with timerEnd so the bar ratio stays correct across level-ups
+  timerEnd: 0,                 // performance.now() when timer expires; set in startGame() and on each word acceptance and level-up resume
+  timerDuration: 0,            // ms allotted for current word; always set together with timerEnd (including in startGame()) so the bar ratio is correct from frame 1
+  lastPulseSecond: 0,          // tracks which second the last low-timer pulse fired; prevents per-frame re-triggering
   levelingUp: false,
   shatterNodes: [],            // { el, vx, vy, vr, t } — existing .word-node DOM elements mid-shatter with velocity vectors
 }
@@ -199,7 +207,7 @@ Web Audio API, initialized on first user gesture.
 | Invalid word | Low blip, square wave, ~180Hz, 80ms |
 | Already used word | Blip, square wave, ~220Hz, 80ms (slightly higher) |
 | Level up | Three-note rising sweep, sine, ~300→450→600Hz, staggered 80ms |
-| Timer low (≤3s remaining) | Quiet pulse per second, sine, ~440Hz, 60ms |
+| Timer low (≤3s remaining) | Quiet pulse per second, sine, ~440Hz, 60ms — track `lastPulseSecond = Math.ceil(remaining / 1000)` in state; fire only when it changes to avoid per-frame triggering |
 | Game over / shatter | Descending sine glide, ~300→80Hz, 800ms, low gain |
 
 No ambient or looping audio.
