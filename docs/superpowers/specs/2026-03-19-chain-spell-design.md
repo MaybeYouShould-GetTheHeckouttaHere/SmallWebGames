@@ -22,7 +22,7 @@ A word-chain typing game where each new word must start with the last letter of 
 - On invalid submission (wrong letter or not in dictionary): input shakes, **red** border flash, no score penalty — time continues draining.
 - On already-used word submission: input shakes, **amber** border flash — visually distinct from wrong-letter errors; audio is also distinct (see Audio section).
 - Timer reaches zero: game over, shatter animation, score summary.
-- **Restart from OVER:** any keypress or tap during `STATE.OVER` triggers restart. If the shatter animation is still running, cancel it immediately (stop the animation loop, remove all shatter DOM nodes), clear the chain field, and call `startGame()`. The implementer does not need a separate restart button — the existing global keydown listener suffices.
+- **Restart from OVER:** any keypress or tap during `STATE.OVER` triggers restart. The input is **disabled and blurred** on `endGame()` so keypresses are not swallowed by the input. A global `keydown` listener (or a tap on the score summary) calls `startGame()`, which re-enables the input and focuses it. If the shatter animation is still running, cancel it immediately (stop the animation loop, remove all shatter DOM nodes), clear the chain field, and then call `startGame()`.
 
 ### Dictionary
 
@@ -37,7 +37,7 @@ Embedded as `const WORDS = new Set([...])` — ~20k common English words inlined
 
 - Every 5 correct words triggers a level-up.
 - Timer ceiling per level: `max(5000, 15000 - level × 500)` ms (tightens by 0.5s per level, floors at 5s).
-- Level-up transitions to `STATE.LEVELUP`. The timer is frozen (the game loop does not evaluate `timerEnd`) while in this state. The overlay shows "LEVEL {n}" with scale-in animation (~800ms), then dismisses: `setState(STATE.PLAYING)`, set `timerEnd = performance.now() + newCeiling`, set `timerDuration = newCeiling`.
+- Level-up transitions to `STATE.LEVELUP`. The timer bar holds at its current visual fill while in this state (the game loop does not evaluate `timerEnd`). Record `game.levelUpPausedAt = performance.now()` on entry. The overlay shows "LEVEL {n}" with scale-in animation (~800ms), then dismisses: `setState(STATE.PLAYING)`, set `timerEnd += (performance.now() - game.levelUpPausedAt)` to compensate for the frozen time, then additionally reset to the new ceiling: `timerEnd = performance.now() + newCeiling`, `timerDuration = newCeiling`. **Bonus time earned at the triggering word is discarded** — the level-up timer reset takes precedence. This is intentional; the level-up is a hard reset, not a continuation.
 - Level is the only difficulty axis.
 
 ---
@@ -109,15 +109,16 @@ During `STATE.IDLE`:
 ### SVG Connector Paths
 
 - SVG overlay: same dimensions as chain field, `pointer-events: none`, sits behind word nodes.
-- After each new word's entry animation completes, read screen coordinates via `getBoundingClientRect()` on the last-letter `<span>` of the previous word and the first-letter `<span>` of the new word, then draw or update a `<path>` between those points. Listen for `transitionend` **attached directly to the new node** (not delegated from the container), filtered to `e.propertyName === 'transform'`, to avoid double-firing (opacity also fires `transitionend`) and to avoid catching scroll transitions on older nodes.
+- After each new word's entry animation completes, read screen coordinates via `getBoundingClientRect()` on the last-letter `<span>` of the previous word and the first-letter `<span>` of the new word, then draw or update a `<path>` between those points. Listen for `transitionend` **attached directly to the new node** using `{ once: true }` (not delegated from the container), filtered to `e.propertyName === 'transform'`, to avoid double-firing (opacity also fires `transitionend`), to avoid catching scroll transitions on older nodes, and to prevent the listener accumulating on subsequent leftward shifts of the same node.
 - Each connector path has a `data-pair` attribute (e.g. `"2-3"`) matching the chain indices it connects. When a word node is pruned from the DOM (see below), its associated connector path is also removed by matching `data-pair`.
 - Shape: cubic bezier curving upward slightly.
 - Style: blue accent stroke, 1.5px, ~40% opacity. Connective tissue, not a feature.
 
 ### Node Pruning
 
-- Word nodes more than **300px to the left of the container's left edge** (i.e., `node.getBoundingClientRect().right < containerRect.left - 300`) are removed from the DOM along with their connector path. This prevents unbounded DOM growth during long sessions and keeps the shatter node set bounded.
+- Word nodes whose **right edge has passed more than 300px beyond the container's left edge** are removed from the DOM along with their connector path (matched by `data-pair`). The 300px margin is a hysteresis buffer — it keeps nodes alive slightly past the visible area to avoid popping mid-scroll. Condition: `node.getBoundingClientRect().right < containerRect.left - 300`.
 - Pruning happens once per new word accepted, after the entry animation starts (before `transitionend`).
+- This prevents unbounded DOM growth during long sessions and keeps the shatter node set bounded to visible nodes only.
 
 ---
 
@@ -173,7 +174,7 @@ game = {
   timerEnd: 0,                 // performance.now() when timer expires; set in startGame() and on each word acceptance and level-up resume
   timerDuration: 0,            // ms allotted for current word; always set together with timerEnd (including in startGame()) so the bar ratio is correct from frame 1
   lastPulseSecond: 0,          // tracks which second the last low-timer pulse fired; prevents per-frame re-triggering
-  levelingUp: false,
+  levelUpPausedAt: 0,          // performance.now() when STATE.LEVELUP began; used to compensate timerEnd on dismiss; do not use a separate `levelingUp` boolean — check `game.state === STATE.LEVELUP` instead
   shatterNodes: [],            // { el, vx, vy, vr, t } — existing .word-node DOM elements mid-shatter with velocity vectors
 }
 ```
