@@ -118,3 +118,48 @@ body {
   color: var(--muted);
   text-transform: uppercase;
 }
+
+/* ── Title (IDLE) ────────────────────────────────────────────────── */
+#title-display {
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: clamp(2rem, 6vw, 4rem);
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--accent);
+  animation: pulse-title 2.4s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+@keyframes pulse-title {
+  0%, 100% { opacity: 0.5; }
+  50%       { opacity: 1;   }
+}
+
+/* Hide timer bar in IDLE */
+body.idle #timer-track { visibility: hidden; }
+body.idle #top-bar     { opacity: 0.4; }
+body.idle #level-badge { display: none; }
+
+/* ── Input feedback ──────────────────────────────────────────────── */
+#word-input.flash-valid   { border-color: var(--accent); }
+#word-input.flash-invalid { border-color: var(--error);  }
+#word-input.flash-dupe    { border-color: var(--dupe);   }
+
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  20%     { transform: translateX(-8px); }
+  40%     { transform: translateX(8px); }
+  60%     { transform: translateX(-5px); }
+  80%     { transform: translateX(5px); }
+}
+
+#word-input.shake { animation: shake 0.22s ease; }
+
+/* ── Playing state ───────────────────────────────────────────────── */
+body.playing #title-display { display: none; }
+body.playing #top-bar       { opacity: 1; }
+body.playing #level-badge   { display: block; }
+body.playing #timer-track   { visibility: visible; }

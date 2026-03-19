@@ -36,12 +36,137 @@ let game = defaultState();
 // ─── 4. AudioContext setup (Task 13) ─────────────────────────────────────────
 
 // ─── 5. Game state machine (Tasks 6, 11, 12, 14) ─────────────────────────────
+const scoreEl     = document.getElementById('score');
+const bestEl      = document.getElementById('best');
+const levelEl     = document.getElementById('level-badge');
+const timerBarEl  = document.getElementById('timer-bar');
+const chainField  = document.getElementById('chain-field');
+const svgOverlay  = document.getElementById('connector-svg');
+
+function setState(next) {
+  game.state = next;
+  document.body.className = next; // sets CSS class for state-based display
+}
+
+function timerCeiling(level) {
+  return Math.max(MIN_TIMER_MS, BASE_TIMER_MS - level * TIMER_STEP_MS);
+  // spec: max(5000, 15000 - level*500) → level 1 = 14500ms, level 2 = 14000ms
+}
+
+function startGame() {
+  game = defaultState();
+  game.score = 0;
+  // Load best score
+  const saved = JSON.parse(localStorage.getItem('chain-spell') || '{}');
+  game.best = saved.best || 0;
+  bestEl.textContent = `BEST: ${game.best}`;
+  scoreEl.textContent = '0';
+  levelEl.textContent = 'LVL 1';
+  // Clear DOM
+  chainField.querySelectorAll('.word-node').forEach(el => el.remove());
+  svgOverlay.innerHTML = '';
+  // Idle until first word
+  setState(STATE.IDLE);
+  updateInputLabel();
+  inputEl.disabled = false;
+  inputEl.focus();
+}
+
+function acceptWord(word) {
+  // First word: start the game
+  if (game.state === STATE.IDLE) {
+    setState(STATE.PLAYING);
+    const ceiling = timerCeiling(game.level);
+    game.timerDuration = ceiling;
+    game.timerEnd = performance.now() + ceiling;
+    game.lastPulseSecond = 3;
+  } else {
+    // Subsequent words: reset timer + bonus (unless level-up fires below)
+    const ceiling = timerCeiling(game.level);
+    const bonus   = word.length * BONUS_MS_PER_CHAR;
+    game.timerDuration = ceiling;
+    game.timerEnd = performance.now() + ceiling + bonus;
+  }
+
+  // Record word
+  game.usedWords.add(word);
+  game.requiredLetter = word[word.length - 1];
+  game.chain.push({ word, el: null, translateX: 0 });
+
+  // Score
+  game.score += word.length * SCORE_PER_CHAR;
+
+  // Level up check (bonus time is NOT applied if levelling up — triggerLevelUp() resets the timer)
+  game.wordsThisLevel++;
+  if (game.wordsThisLevel >= WORDS_PER_LEVEL) {
+    game.wordsThisLevel = 0;
+    game.level++;
+    // Correct timer: hard reset to new ceiling (overrides bonus set above)
+    const newCeiling = timerCeiling(game.level);
+    game.timerDuration = newCeiling;
+    game.timerEnd = performance.now() + newCeiling;
+    // triggerLevelUp() added in Task 12
+  }
+
+  addWordNode(word);        // added in Task 7
+  updateInputLabel();
+}
 
 // ─── 6. Input handler (Task 5) ───────────────────────────────────────────────
+const inputEl = document.getElementById('word-input');
+const labelEl = document.getElementById('input-label');
+
+function validateWord(raw) {
+  const word = raw.trim().toLowerCase();
+  if (!word) return { ok: false, reason: null };
+  if (!WORDS.has(word))            return { ok: false, reason: 'invalid' };
+  if (game.requiredLetter && word[0] !== game.requiredLetter)
+                                   return { ok: false, reason: 'invalid' };
+  if (game.usedWords.has(word))    return { ok: false, reason: 'dupe' };
+  return { ok: true, word };
+}
+
+function flashInput(type) {
+  // type: 'valid' | 'invalid' | 'dupe'
+  inputEl.classList.remove('flash-valid', 'flash-invalid', 'flash-dupe', 'shake');
+  void inputEl.offsetWidth; // force reflow to restart animation
+  inputEl.classList.add(`flash-${type}`);
+  if (type !== 'valid') inputEl.classList.add('shake');
+  setTimeout(() => {
+    inputEl.classList.remove(`flash-${type}`, 'shake');
+  }, 350);
+}
+
+function updateInputLabel() {
+  if (game.state === STATE.IDLE) {
+    labelEl.textContent = 'type any word to begin';
+  } else if (game.state === STATE.PLAYING && game.requiredLetter) {
+    labelEl.textContent = `next word must start with  ${game.requiredLetter.toUpperCase()}`;
+  } else {
+    labelEl.textContent = '';
+  }
+}
+
+function handleEnter() {
+  if (game.state === STATE.OVER || game.state === STATE.LEVELUP) return;
+  const { ok, word, reason } = validateWord(inputEl.value);
+  if (!ok) {
+    if (reason) flashInput(reason === 'dupe' ? 'dupe' : 'invalid');
+    return;
+  }
+  inputEl.value = '';
+  flashInput('valid');
+  acceptWord(word);
+}
+
+inputEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter') handleEnter();
+});
 
 // ─── 7. Game update logic (Tasks 11–12, 14, 16) ──────────────────────────────
 
 // ─── 8. Render logic (Tasks 7–10) ────────────────────────────────────────────
+function addWordNode(word) { /* stub — Task 7 */ }
 
 // ─── 9. Game loop ─────────────────────────────────────────────────────────────
 let lastTime = 0;
@@ -58,4 +183,5 @@ function update(dt) { /* filled in later */ }
 function render()   { /* filled in later */ }
 
 // ─── 10. Init ─────────────────────────────────────────────────────────────────
+startGame();
 requestAnimationFrame(loop);
