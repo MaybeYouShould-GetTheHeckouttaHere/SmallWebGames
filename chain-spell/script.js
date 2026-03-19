@@ -42,6 +42,7 @@ function unlockAudio() {
   audioCtx = new AudioContext();
 }
 document.addEventListener('keydown', unlockAudio, { once: true });
+document.addEventListener('click',   unlockAudio, { once: true });
 
 function playTone(freq, type = 'sine', duration = 0.1, gain = 0.25, startDelay = 0) {
   if (!audioCtx) return;
@@ -125,6 +126,7 @@ function startGame() {
   game = defaultState();
   game.score = 0;
   bgLayers = [[], []];
+  burstParticles = [];
   // Load best score
   const saved = JSON.parse(localStorage.getItem('chain-spell') || '{}');
   game.best = saved.best || 0;
@@ -323,6 +325,7 @@ function endGame() {
   game.best = best;
   bestEl.textContent = `BEST: ${best}`;
 
+  svgOverlay.innerHTML = ''; // clear connector paths before shatter — they'd stay frozen otherwise
   if (game.chain.length === 0 || game.chain.every(e => !e.el)) {
     showScoreSummary();
   } else {
