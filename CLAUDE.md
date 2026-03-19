@@ -400,27 +400,6 @@ function startGame() {
 }
 ```
 
-**Reusable pattern — modifier system:**
-```js
-const MODIFIER_DEFAULTS = { shrinkingCircles: false, hardTiming: false, ... };
-const MODIFIER_LIST = [
-  { id: 'hardTiming', label: 'Hard Timing', group: 'Difficulty',
-    desc: 'Hit windows halved.', incompatible: ['dizziness'] },
-  // ...
-];
-let selectedModifiers = { ...MODIFIER_DEFAULTS };
-// Load from localStorage on init, save on change.
-```
-Build the UI dynamically from `MODIFIER_LIST` in `initModifiers()`. Attach `change` listeners that auto-uncheck incompatible modifiers. This pattern scales to any number of modifiers with zero per-modifier UI code.
-
-**Reusable pattern — zone-penalty spawn:**
-To bias spawns away from a screen region (HUD, corner counter), add a penalty to the clearance score rather than hard-rejecting. The best-of-N fallback still places dots in the zone if there is no alternative, avoiding softlocks:
-```js
-const penalty = inZone ? ZONE_PENALTY : 0;   // e.g. 500
-const score   = clearance - penalty;
-if (score > bestScore) { bestScore = score; best = { x, y }; }
-```
-
 **Reusable pattern — wall-clock pause freeze:**
 For any timer based on `performance.now()` that must pause with the game, record when the pause started and add the elapsed pause duration on resume:
 ```js
@@ -436,8 +415,3 @@ function resumeGame() {
 **Clock choice — `performance.now()` vs `audioCtx.currentTime`:**
 Use `audioCtx.currentTime` for beat scheduling. Use `performance.now()` for everything else: grace windows, click cooldowns, combo timers, UI countdowns, pause tracking. Both clocks advance in real time at the same rate; the distinction is semantic, not functional.
 
-**CSS — custom checkboxes with SVG background-image:**
-`::after` pseudo-elements on checkboxes require `position: relative` on the parent, which shifts layout. Use `background-image: url("data:image/svg+xml,...")` on the `:checked` state instead — no positioning side-effects, works in all browsers.
-
-**CSS — tooltips escaping a fixed panel:**
-A panel fixed to the screen edge needs `overflow: visible` for tooltips to extend beyond it. `overflow-y: auto` clips any child that overflows even horizontally. If content fits without scrolling (16 items on any modern screen), `overflow: visible` is always correct.
