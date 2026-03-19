@@ -17,7 +17,7 @@ A word-chain typing game where each new word must start with the last letter of 
 
 - Player types a word into a text input and presses Enter to submit.
 - Valid submission: word exists in dictionary, starts with the required letter (last letter of the most recent word), has not been used in this game.
-- **First word:** no letter constraint — `requiredLetter` is empty at game start. Any valid dictionary word starts the chain. Timer begins at the level-1 ceiling (15s) when `startGame()` is called.
+- **First word:** no letter constraint — `requiredLetter` is empty at game start. Any valid dictionary word starts the chain. The timer does **not** start until the first word is accepted — the player types their opening word at leisure. On acceptance, `timerEnd` and `timerDuration` are set and `STATE.PLAYING` begins.
 - On valid submission: word is added to the chain, timer is reset to the current level ceiling then bonus seconds are added on top (`+word.length × 0.5s`); time can briefly exceed the ceiling and that is intentional — it rewards longer words. **If the submission also triggers a level-up**, do not apply the bonus — call `levelUp()` immediately after scoring the word, which performs a hard timer reset to the new ceiling.
 - On invalid submission (wrong letter or not in dictionary): input shakes, **red** border flash, no score penalty — time continues draining.
 - On already-used word submission: input shakes, **amber** border flash — visually distinct from wrong-letter errors; audio is also distinct (see Audio section).
@@ -49,7 +49,7 @@ During `STATE.IDLE`:
 - The game title "CHAIN SPELL" is displayed centered in the chain field area, large, in the accent blue color, with a gentle opacity pulse animation.
 - Input zone shows a one-line instruction beneath the input: `"type any word to begin"`.
 - No timer bar is shown (or it is hidden).
-- Player starts the game by typing any word into the input and pressing Enter. The first valid dictionary word starts the chain and transitions to `STATE.PLAYING`.
+- Player starts the game by typing any word into the input and pressing Enter. The first valid dictionary word starts the chain, sets the timer to the level-1 ceiling, and transitions to `STATE.PLAYING`. The timer bar is hidden until this moment.
 - No separate "Start" button — the input itself is the entry point.
 
 ---
