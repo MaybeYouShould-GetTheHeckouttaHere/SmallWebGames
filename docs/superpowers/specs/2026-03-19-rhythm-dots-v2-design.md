@@ -83,15 +83,62 @@ const DIFFICULTY_KEYS = Object.keys(DIFFICULTIES); // ordered array
 
 ### Active config
 
-`game.cfg` holds the active config object (set at `startGame`). All functions that currently read bare constants (`HIT_WINDOW`, `STRESS_MISS_ADD`, etc.) are updated to read `game.cfg.X` instead. The dynamic getters become:
+`game.cfg` holds the active config object (set at `startGame`). All functions that currently read bare stress/timing constants are updated to read `game.cfg.X` instead. The dynamic getters become:
 
 ```js
-function getHitWindow()     { return HIT_WINDOW     * game.hitWindowMult; }
-// → replaced by:
 function getHitWindow()     { return game.cfg.hitWindow     * game.hitWindowMult; }
 function getTimingGood()    { return game.cfg.timingGood    * game.hitWindowMult; }
 function getTimingPerfect() { return game.cfg.timingPerfect * game.hitWindowMult; }
 ```
+
+`STRESS_DIST_SCALE` (currently `0.12`) is **not** per-difficulty — it remains a bare constant. Its role (scaling the distance-stress contribution) does not need to vary across difficulty levels.
+
+#### Complete constant migration table
+
+Every bare constant below is deleted from the top of the file and replaced with a `game.cfg.*` read at every call site. Do a global search-and-replace for each:
+
+| Old bare constant | New `game.cfg` field | Call sites |
+|---|---|---|
+| `HIT_WINDOW` | `game.cfg.hitWindow` | `getHitWindow()` |
+| `TIMING_GOOD` | `game.cfg.timingGood` | `getTimingGood()` |
+| `TIMING_PERFECT` | `game.cfg.timingPerfect` | `getTimingPerfect()` |
+| `STRESS_MISS_ADD` | `game.cfg.stressMissAdd` | `registerMiss()` |
+| `STRESS_MEH_ADD` | `game.cfg.stressMehAdd` | `handleClick()` hit-handler |
+| `STRESS_GOOD_SUB` | `game.cfg.stressGoodSub` | `handleClick()` hit-handler |
+| `STRESS_EXCELLENT_SUB` | `game.cfg.stressExcellentSub` | `handleClick()` hit-handler |
+| `STRESS_PERFECT_SUB` | `game.cfg.stressPerfectSub` | `handleClick()` hit-handler |
+| `STRESS_STREAK_GOOD` | `game.cfg.stressStreakGood` | `checkStreakBonus()` |
+| `STRESS_STREAK_EXCELLENT` | `game.cfg.stressStreakExcellent` | `checkStreakBonus()` |
+| `STRESS_STREAK_PERFECT` | `game.cfg.stressStreakPerfect` | `checkStreakBonus()` |
+| `STRESS_DRIFT_PER_SEC` | `game.cfg.stressDriftPerSec` | game loop passive-stress block |
+| `STRESS_DECAY_PER_SEC` | `game.cfg.stressDecayPerSec` | game loop passive-stress block |
+| `STRESS_CALM_THRESHOLD` | `game.cfg.stressCalmThreshold` | game loop passive-stress block |
+| `LIFE_RECOVERY_INTERVAL` | `game.cfg.lifeRecoveryInterval` | `addScore()` — both the threshold check and the `+= ...` increment |
+| `TIME_COMPRESS_INTERVAL` | `game.cfg.timeCompressInterval` | `addScore()` — both the threshold check and the `+= ...` increment |
+| `TIME_COMPRESS_FACTOR` | `game.cfg.timeCompressFactor` | `addScore()` |
+| `TIME_COMPRESS_MIN_FRAC` | `game.cfg.timeCompressMinFrac` | `addScore()` |
+
+`STRESS_DIST_SCALE`, `STRESS_SPAWN_MIN_SPREAD`, and `STRESS_SPAWN_MAX_SPREAD` are **not** in the table — they remain bare constants.
+
+### Initialization order
+
+`defaultState()` currently seeds `nextLifeScore` and `nextCompressScore` from bare constants. After the refactor, `startGame()` must:
+
+1. Set `game.cfg = DIFFICULTIES[selectedDifficulty]`
+2. Then call `Object.assign(game, defaultState())` — **but** `defaultState()` still references bare constants for those two fields. To avoid this, `startGame()` re-initializes them from `game.cfg` immediately after `defaultState()`:
+
+```js
+function startGame() {
+  ensureAudio();
+  game = defaultState();
+  game.cfg = DIFFICULTIES[selectedDifficulty];
+  game.nextLifeScore     = game.cfg.lifeRecoveryInterval;
+  game.nextCompressScore = game.cfg.timeCompressInterval;
+  // ... rest of startGame
+}
+```
+
+`defaultState()` must use `nextLifeScore: 0` and `nextCompressScore: 0` as placeholder zeros. The bare constants `LIFE_RECOVERY_INTERVAL` and `TIME_COMPRESS_INTERVAL` are deleted from the file, so leaving them in `defaultState()` would throw a ReferenceError. The `startGame()` overwrite is authoritative.
 
 ### Persistence
 
@@ -101,7 +148,24 @@ function getTimingPerfect() { return game.cfg.timingPerfect * game.hitWindowMult
 
 Both the IDLE and OVER overlay render a difficulty selector row above the instruction line. Five buttons, each labeled with the difficulty name, colored with the difficulty's `color` value. The selected button has a white border and full-opacity text; others are dimmer (60% opacity, no border).
 
-Clicking a button sets `selectedDifficulty` and re-renders the overlay (does not start the game). Space or a field-click starts the game with the current `selectedDifficulty`.
+Clicking a button sets `selectedDifficulty`, saves it to `localStorage`, and re-renders the overlay (does not start the game). Space or a field-click starts the game with the current `selectedDifficulty`.
+
+#### Event binding for difficulty buttons
+
+`renderOverlay` uses `innerHTML` assignment. After setting `content.innerHTML`, attach button listeners with `querySelectorAll`:
+
+```js
+content.querySelectorAll('.diff-btn').forEach(btn => {
+  btn.addEventListener('click', e => {
+    e.stopPropagation(); // prevent click reaching onClickAnywhere
+    selectedDifficulty = btn.dataset.diff;
+    localStorage.setItem('rhythm-dots-difficulty', selectedDifficulty);
+    renderOverlay();
+  });
+});
+```
+
+`e.stopPropagation()` is required — without it, the click bubbles up to `onClickAnywhere` which would immediately call `startGame()`, defeating the selection-before-start flow. Each button carries `data-diff="<difficulty key>"` set in the `innerHTML` template.
 
 #### CSS additions (`style.css`)
 
@@ -141,6 +205,8 @@ Button `color` and `border-color` (when selected) use inline styles set from `di
 ### Data
 
 `game.ghosts`: array of `{ x, y, hitRadius, expiresAt }` where `expiresAt = performance.now() + 50`.
+
+`performance.now()` is used intentionally here (not `audioCtx.currentTime`) because the grace window is a pure wall-clock timeout with no audio scheduling involved. Both clocks advance at the same rate, so the 50 ms window is accurate.
 
 Added to `defaultState()`. Cleared in `clearDots()` alongside dot cleanup.
 
