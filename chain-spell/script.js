@@ -26,8 +26,8 @@ const defaultState = () => ({
   wordsThisLevel: 0,
   timerEnd:       0,
   timerDuration:  0,
-  lastPulseSecond:0,
-  levelUpPausedAt:0,
+  lastPulseSecond:0,  // last integer-second at which low-timer pulse fired
+  levelUpPausedAt:0,  // reserved; not currently used for timer compensation
   shatterNodes:   [],           // { el, vx, vy, vr, elapsed }
 });
 
@@ -46,6 +46,7 @@ let game = defaultState();
 // ─── 9. Game loop ─────────────────────────────────────────────────────────────
 let lastTime = 0;
 function loop(ts) {
+  if (!lastTime) { lastTime = ts; requestAnimationFrame(loop); return; }
   const dt = Math.min(ts - lastTime, 100) / 1000;
   lastTime = ts;
   update(dt);
