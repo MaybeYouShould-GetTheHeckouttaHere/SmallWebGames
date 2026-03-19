@@ -123,6 +123,7 @@ function timerCeiling(level) {
 function startGame() {
   game = defaultState();
   game.score = 0;
+  bgSquares = [];
   // Load best score
   const saved = JSON.parse(localStorage.getItem('chain-spell') || '{}');
   game.best = saved.best || 0;
@@ -481,7 +482,67 @@ function loop(ts) {
   requestAnimationFrame(loop);
 }
 
+// ─── Background squares ────────────────────────────────────────────────────────
+const bgCanvas = document.getElementById('bg-canvas');
+const bgCtx    = bgCanvas.getContext('2d');
+let bgSquares    = [];
+let bgSpawnTimer = 0;
+
+function resizeBgCanvas() {
+  bgCanvas.width  = window.innerWidth;
+  bgCanvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeBgCanvas);
+resizeBgCanvas();
+
+function updateBg(dt) {
+  const baseSpeed = Math.min(1400, 280 + game.level * 70);
+
+  bgSpawnTimer -= dt;
+  if (bgSpawnTimer <= 0) {
+    bgSpawnTimer = 0.15;
+    const size = 5 + Math.random() * 22;
+    bgSquares.push({
+      x:       bgCanvas.width + size,
+      y:       Math.random() * bgCanvas.height,
+      size,
+      vx:      baseSpeed * (0.5 + Math.random() * 0.7),
+      opacity: 0.07 + Math.random() * 0.11,
+    });
+  }
+
+  for (const s of bgSquares) s.x -= s.vx * dt;
+  bgSquares = bgSquares.filter(s => s.x + s.size > 0);
+}
+
+function renderBg() {
+  bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+
+  let hue, sat, lit;
+  if (game.state === STATE.OVER) {
+    hue = 0; sat = 80; lit = 60; // red
+  } else if (game.state === STATE.PLAYING || game.state === STATE.LEVELUP) {
+    const remaining = game.timerEnd - performance.now();
+    if (remaining <= 3000 && remaining > 0) {
+      hue = 40; sat = 90; lit = 60; // yellow
+    } else {
+      hue = 210; sat = 90; lit = 65; // blue
+    }
+  } else {
+    hue = 210; sat = 90; lit = 65; // blue (IDLE)
+  }
+
+  for (const s of bgSquares) {
+    bgCtx.globalAlpha = s.opacity;
+    bgCtx.fillStyle   = `hsl(${hue}, ${sat}%, ${lit}%)`;
+    bgCtx.fillRect(s.x, s.y, s.size, s.size);
+  }
+  bgCtx.globalAlpha = 1;
+}
+
 function update(dt) {
+  updateBg(dt);
+
   // Shatter physics run during STATE.OVER — must check BEFORE the STATE.PLAYING guard
   if (game.state === STATE.OVER && game.shatterNodes.length > 0) {
     updateShatter(dt);
@@ -508,6 +569,8 @@ function update(dt) {
 }
 
 function render() {
+  renderBg();
+
   // Timer bar — only during PLAYING
   if (game.state === STATE.PLAYING) {
     const remaining = game.timerEnd - performance.now();
