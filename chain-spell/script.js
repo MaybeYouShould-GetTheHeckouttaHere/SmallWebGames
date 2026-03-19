@@ -35,6 +35,63 @@ const defaultState = () => ({
 let game = defaultState();
 
 // ─── 4. AudioContext setup (Task 13) ─────────────────────────────────────────
+let audioCtx = null;
+
+function unlockAudio() {
+  if (audioCtx) return;
+  audioCtx = new AudioContext();
+}
+document.addEventListener('keydown', unlockAudio, { once: true });
+
+function playTone(freq, type = 'sine', duration = 0.1, gain = 0.25, startDelay = 0) {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const env = audioCtx.createGain();
+  osc.connect(env); env.connect(audioCtx.destination);
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, audioCtx.currentTime + startDelay);
+  env.gain.setValueAtTime(gain, audioCtx.currentTime + startDelay);
+  env.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + startDelay + duration);
+  osc.start(audioCtx.currentTime + startDelay);
+  osc.stop(audioCtx.currentTime + startDelay + duration);
+}
+
+function sfxAccept() {
+  playTone(220, 'sine', 0.08, 0.2);
+  playTone(440, 'sine', 0.1,  0.2, 0.06);
+}
+
+function sfxInvalid() {
+  playTone(180, 'square', 0.08, 0.15);
+}
+
+function sfxDupe() {
+  playTone(220, 'square', 0.08, 0.15);
+}
+
+function sfxLevelUp() {
+  playTone(300, 'sine', 0.1, 0.18);
+  playTone(450, 'sine', 0.1, 0.18, 0.08);
+  playTone(600, 'sine', 0.1, 0.18, 0.16);
+}
+
+function sfxTimerPulse() {
+  playTone(440, 'sine', 0.06, 0.08);
+}
+
+function sfxGameOver() {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const env = audioCtx.createGain();
+  osc.connect(env); env.connect(audioCtx.destination);
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.8);
+  env.gain.setValueAtTime(0.2, audioCtx.currentTime);
+  env.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.8);
+  osc.start(audioCtx.currentTime);
+  osc.stop(audioCtx.currentTime + 0.8);
+}
 
 // ─── 5. Game state machine (Tasks 6, 11, 12, 14) ─────────────────────────────
 const scoreEl     = document.getElementById('score');
@@ -114,6 +171,7 @@ function acceptWord(word) {
     triggerLevelUp();
   }
 
+  sfxAccept();
   addWordNode(word);        // added in Task 7
   updateInputLabel();
 }
@@ -127,6 +185,7 @@ function triggerLevelUp() {
   levelupOverlay.classList.add('active');
   levelEl.textContent = `LVL ${game.level}`;
 
+  sfxLevelUp();
   setTimeout(() => {
     levelupOverlay.classList.remove('active');
     const ceiling = timerCeiling(game.level);
@@ -159,7 +218,10 @@ function flashInput(type) {
   inputEl.classList.remove('flash-valid', 'flash-invalid', 'flash-dupe', 'shake');
   void inputEl.offsetWidth; // force reflow to restart animation
   inputEl.classList.add(`flash-${type}`);
-  if (type !== 'valid') inputEl.classList.add('shake');
+  if (type !== 'valid') {
+    inputEl.classList.add('shake');
+    if (type === 'dupe') sfxDupe(); else sfxInvalid();
+  }
   flashTimer = setTimeout(() => {
     inputEl.classList.remove(`flash-${type}`, 'shake');
     flashTimer = null;
@@ -365,6 +427,16 @@ function update(dt) {
   if (performance.now() >= game.timerEnd) {
     endGame();
     return;
+  }
+
+  // Low-timer pulse (≤3s remaining)
+  const remaining = game.timerEnd - performance.now();
+  if (remaining <= 3000 && remaining > 0) {
+    const pulseSecond = Math.ceil(remaining / 1000);
+    if (pulseSecond !== game.lastPulseSecond) {
+      game.lastPulseSecond = pulseSecond;
+      sfxTimerPulse();
+    }
   }
 }
 
