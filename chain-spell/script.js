@@ -29,6 +29,7 @@ const defaultState = () => ({
   lastPulseSecond:0,  // last integer-second at which low-timer pulse fired
   levelUpPausedAt:0,  // reserved; not currently used for timer compensation
   shatterNodes:   [],           // { el, vx, vy, vr, elapsed }
+  best:           0,
 });
 
 let game = defaultState();
@@ -43,9 +44,12 @@ const timerBarEl  = document.getElementById('timer-bar');
 const chainField  = document.getElementById('chain-field');
 const svgOverlay  = document.getElementById('connector-svg');
 
+const ALL_STATES = Object.values(STATE);
+
 function setState(next) {
   game.state = next;
-  document.body.className = next; // sets CSS class for state-based display
+  document.body.classList.remove(...ALL_STATES);
+  document.body.classList.add(next);
 }
 
 function timerCeiling(level) {
@@ -126,14 +130,18 @@ function validateWord(raw) {
   return { ok: true, word };
 }
 
+let flashTimer = null;
+
 function flashInput(type) {
+  if (flashTimer !== null) { clearTimeout(flashTimer); flashTimer = null; }
   // type: 'valid' | 'invalid' | 'dupe'
   inputEl.classList.remove('flash-valid', 'flash-invalid', 'flash-dupe', 'shake');
   void inputEl.offsetWidth; // force reflow to restart animation
   inputEl.classList.add(`flash-${type}`);
   if (type !== 'valid') inputEl.classList.add('shake');
-  setTimeout(() => {
+  flashTimer = setTimeout(() => {
     inputEl.classList.remove(`flash-${type}`, 'shake');
+    flashTimer = null;
   }, 350);
 }
 
