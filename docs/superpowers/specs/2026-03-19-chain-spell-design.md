@@ -18,7 +18,7 @@ A word-chain typing game where each new word must start with the last letter of 
 - Player types a word into a text input and presses Enter to submit.
 - Valid submission: word exists in dictionary, starts with the required letter (last letter of the most recent word), has not been used in this game.
 - **First word:** no letter constraint — `requiredLetter` is empty at game start. Any valid dictionary word starts the chain. Timer begins at the level-1 ceiling (15s) when `startGame()` is called.
-- On valid submission: word is added to the chain, timer is reset to the current level ceiling then bonus seconds are added on top (`+word.length × 0.5s`); time can briefly exceed the ceiling and that is intentional — it rewards longer words.
+- On valid submission: word is added to the chain, timer is reset to the current level ceiling then bonus seconds are added on top (`+word.length × 0.5s`); time can briefly exceed the ceiling and that is intentional — it rewards longer words. **If the submission also triggers a level-up**, do not apply the bonus — call `levelUp()` immediately after scoring the word, which performs a hard timer reset to the new ceiling.
 - On invalid submission (wrong letter or not in dictionary): input shakes, **red** border flash, no score penalty — time continues draining.
 - On already-used word submission: input shakes, **amber** border flash — visually distinct from wrong-letter errors; audio is also distinct (see Audio section).
 - Timer reaches zero: game over, shatter animation, score summary.
@@ -75,7 +75,7 @@ During `STATE.IDLE`:
 
 ### Layout Zones
 
-**Top bar** — score (top-left), level badge (top-center), timer bar (top-right). Always visible during play.
+**Top bar** — score (top-left, with personal best in smaller muted text beneath it), level badge (top-center), timer bar (top-right). Always visible during play.
 
 **Chain field** — middle 60% of screen height. Single horizontal baseline, vertically centered. Words scroll left; the newest word anchors near center-right.
 
@@ -109,15 +109,15 @@ During `STATE.IDLE`:
 ### SVG Connector Paths
 
 - SVG overlay: same dimensions as chain field, `pointer-events: none`, sits behind word nodes.
-- After each new word's entry animation completes, read screen coordinates via `getBoundingClientRect()` on the last-letter `<span>` of the previous word and the first-letter `<span>` of the new word, then draw or update a `<path>` between those points. Listen for `transitionend` **attached directly to the new node** using `{ once: true }` (not delegated from the container), filtered to `e.propertyName === 'transform'`, to avoid double-firing (opacity also fires `transitionend`), to avoid catching scroll transitions on older nodes, and to prevent the listener accumulating on subsequent leftward shifts of the same node.
+- After each new word's entry animation completes, read screen coordinates via `getBoundingClientRect()` on the last-letter `<span>` of the previous word and the first-letter `<span>` of the new word, then draw or update a `<path>` between those points. The SVG overlay has **no `viewBox`** — its coordinate system matches CSS pixels. Convert `getBoundingClientRect()` results to SVG space by subtracting the overlay's own `getBoundingClientRect().left` and `.top`. Listen for `transitionend` **attached directly to the new node** using `{ once: true }` (not delegated from the container), filtered to `e.propertyName === 'transform'`, to avoid double-firing (opacity also fires `transitionend`), to avoid catching scroll transitions on older nodes, and to prevent the listener accumulating on subsequent leftward shifts of the same node.
 - Each connector path has a `data-pair` attribute (e.g. `"2-3"`) matching the chain indices it connects. When a word node is pruned from the DOM (see below), its associated connector path is also removed by matching `data-pair`.
 - Shape: cubic bezier curving upward slightly.
 - Style: blue accent stroke, 1.5px, ~40% opacity. Connective tissue, not a feature.
 
 ### Node Pruning
 
-- Pruning happens once per new word accepted, **before** the `transitionend` listener is attached to the new node. Only nodes older than one word (i.e., not the previous word, whose connector has not yet been drawn) are eligible, so there is no race between connector drawing and pruning.
-- Word nodes whose **right edge has passed more than 300px beyond the container's left edge** are removed from the DOM along with their connector path (matched by `data-pair`). The 300px margin is a hysteresis buffer — it keeps nodes alive past the visible area to avoid popping mid-scroll. Condition: `node.getBoundingClientRect().right < containerRect.left - 300`.
+- Pruning happens once per new word accepted, **before** the `transitionend` listener is attached to the new node. The previous word (n−1) is never eligible for pruning in this pass — its connector to the new word has not yet been drawn. All other nodes are eligible if they meet the position threshold.
+- Word nodes whose **right edge has passed more than 300px beyond the container's left edge** are removed from the DOM along with their connector path (matched by `data-pair`). The 300px margin is a hysteresis buffer — it keeps nodes alive well past the visible area so that connectors between still-visible node pairs are never removed. Condition: `node.getBoundingClientRect().right < containerRect.left - 300`. When a node is pruned, its *outgoing* connector (to the next node) is also removed; the next node's *incoming* connector end is visually unconnected but that node will itself be pruned shortly.
 - By the time a node qualifies for pruning, its connector path was already drawn on a prior word's `transitionend`. Pruning the node and removing its path is safe.
 - This prevents unbounded DOM growth during long sessions and keeps the shatter node set bounded to visible nodes only.
 
@@ -186,7 +186,7 @@ game = {
   timerEnd: 0,                 // performance.now() when timer expires; set in startGame() and on each word acceptance and level-up resume
   timerDuration: 0,            // ms allotted for current word; always set together with timerEnd (including in startGame()) so the bar ratio is correct from frame 1
   lastPulseSecond: 0,          // tracks which second the last low-timer pulse fired; prevents per-frame re-triggering
-  levelUpPausedAt: 0,          // performance.now() when STATE.LEVELUP began; used to compensate timerEnd on dismiss; do not use a separate `levelingUp` boolean — check `game.state === STATE.LEVELUP` instead
+  levelUpPausedAt: 0,          // reserved; timer is replaced (not compensated) on level-up dismiss — do not use a separate `levelingUp` boolean, check `game.state === STATE.LEVELUP` instead
   shatterNodes: [],            // { el, vx, vy, vr, t } — existing .word-node DOM elements mid-shatter with velocity vectors
 }
 ```
