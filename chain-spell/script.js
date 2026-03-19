@@ -434,6 +434,10 @@ function addWordNode(word) {
   const prev = game.chain.length >= 2 ? game.chain[game.chain.length - 2] : null;
   if (prev && prev.el) {
     prev.el.classList.remove('newest');
+    // Only the newest word's first letter is blue; older words show only their last letter
+    const firstSpan = prev.el.querySelector('span');
+    const lastSpan  = prev.el.querySelector('span:last-child');
+    if (firstSpan && firstSpan !== lastSpan) firstSpan.classList.remove('letter-link');
   }
 
   // Measure actual width then shift all older nodes left
