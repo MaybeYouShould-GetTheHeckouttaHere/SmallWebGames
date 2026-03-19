@@ -165,17 +165,18 @@ function acceptWord(word) {
 
   // Level up check (bonus time is NOT applied if levelling up — triggerLevelUp() resets the timer)
   game.wordsThisLevel++;
-  if (game.wordsThisLevel >= WORDS_PER_LEVEL) {
+  const didLevelUp = game.wordsThisLevel >= WORDS_PER_LEVEL;
+  if (didLevelUp) {
     game.wordsThisLevel = 0;
     game.level++;
     // Correct timer: hard reset to new ceiling (overrides bonus set above)
     const newCeiling = timerCeiling(game.level);
     game.timerDuration = newCeiling;
     game.timerEnd = performance.now() + newCeiling;
-    triggerLevelUp();
+    triggerLevelUp(); // plays sfxLevelUp internally — skip sfxAccept to avoid overlap
+  } else {
+    sfxAccept();
   }
-
-  sfxAccept();
   addWordNode(word);        // added in Task 7
   updateInputLabel();
 }
