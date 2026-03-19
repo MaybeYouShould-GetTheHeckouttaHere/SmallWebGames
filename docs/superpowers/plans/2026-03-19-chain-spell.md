@@ -918,6 +918,12 @@ git commit -m "feat(chain-spell): prune off-screen word nodes and connectors"
 
 ```js
 function update(dt) {
+  // Shatter physics run during STATE.OVER — must check BEFORE the STATE.PLAYING guard
+  if (game.state === STATE.OVER && game.shatterNodes.length > 0) {
+    updateShatter(dt); // defined in Task 15; stub it as `function updateShatter(dt) {}` for now
+    return;
+  }
+
   if (game.state !== STATE.PLAYING) return;
 
   // Timer expiry
@@ -926,6 +932,8 @@ function update(dt) {
     return;
   }
 }
+
+function updateShatter(dt) { /* stub — implemented fully in Task 15 */ }
 
 function endGame() {
   setState(STATE.OVER);
@@ -1207,7 +1215,7 @@ git commit -m "feat(chain-spell): score persistence with localStorage best track
 
 - [ ] **Step 2: Implement `buildShatterNodes`**
 
-Add to `endGame()`, replacing the stub call to `showScoreSummary()` for the non-empty chain case:
+Add as a **top-level function** in `script.js` (not nested inside `endGame`), in the game update logic section:
 
 ```js
 function buildShatterNodes() {
@@ -1278,14 +1286,9 @@ function updateShatter(dt) {
 }
 ```
 
-- [ ] **Step 5: Call `updateShatter` from `update`**
+- [ ] **Step 5: Replace the `updateShatter` stub in `update` with the full implementation**
 
-```js
-if (game.state === STATE.OVER && game.shatterNodes.length > 0) {
-  updateShatter(dt);
-  return;
-}
-```
+The stub `function updateShatter(dt) {}` was added in Task 11. Replace it with the full version from Step 4 above. The routing in `update` that calls it (`game.state === STATE.OVER && game.shatterNodes.length > 0`) was already placed before the `STATE.PLAYING` guard in Task 11 — no further changes needed to `update`.
 
 - [ ] **Step 6: Verify** — Play until game over. Word nodes fly off in random directions and fade out over ~600ms. If the chain is empty (no words typed before timer hits zero), the summary appears immediately without a shatter.
 
