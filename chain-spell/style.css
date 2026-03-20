@@ -245,9 +245,74 @@ body.playing #timer-track   { visibility: visible; }
 
 #summary-label   { font-size: 0.75rem; letter-spacing: 0.15em; color: var(--muted); }
 #summary-score   { font-size: clamp(3rem, 10vw, 5rem); font-weight: 700; }
+#summary-chain {
+  max-width: min(80vw, 520px);
+  max-height: 5.5em;
+  overflow-y: auto;
+  font-size: 0.75rem;
+  color: var(--accent);
+  letter-spacing: 0.05em;
+  line-height: 1.7;
+  text-align: center;
+  word-break: break-word;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) transparent;
+  margin-top: 4px;
+}
 #summary-best    { font-size: 0.9rem; color: var(--muted); }
 #summary-detail  { font-size: 0.75rem; color: var(--muted); letter-spacing: 0.08em; margin-top: 4px; }
+#summary-stats {
+  font-size: 0.7rem;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+  margin-top: 2px;
+  min-height: 1.2em;
+  text-align: center;
+}
 #summary-restart { font-size: 0.7rem; color: var(--accent); letter-spacing: 0.1em; margin-top: 24px; }
+
+/* ── Combo display ───────────────────────────────────────────────── */
+#combo-display {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: hsl(40, 90%, 60%);
+  min-width: 4ch;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+#combo-display.active { opacity: 1; }
+
+/* ── Hard Mode toggle ────────────────────────────────────────────── */
+#hard-mode-wrap {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 8px;
+}
+#hard-mode-label {
+  font-size: 0.65rem;
+  letter-spacing: 0.15em;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+body.playing  #hard-mode-wrap,
+body.levelup  #hard-mode-wrap,
+body.over     #hard-mode-wrap { opacity: 0.3; pointer-events: none; }
+
+#forbidden-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--error);
+  min-width: 3ch;
+}
+#word-input.flash-forbidden { border-bottom-color: var(--error) !important; }
 
 /* ── Vignette overlay ────────────────────────────────────────────── */
 #vignette {

@@ -16,6 +16,7 @@
       <div id="best">BEST: 0</div>
     </div>
     <div id="level-badge">LVL 1</div>
+    <div id="combo-display" aria-live="polite"></div>
     <div id="timer-track">
       <div id="timer-bar"></div>
     </div>
@@ -32,6 +33,12 @@
     <input id="word-input" type="text" autocomplete="off" autocorrect="off"
            autocapitalize="off" spellcheck="false" placeholder="type any word…">
     <div id="input-label">type any word to begin</div>
+    <div id="hard-mode-wrap">
+      <label id="hard-mode-label">
+        <input type="checkbox" id="hard-mode-check"> HARD MODE
+      </label>
+      <div id="forbidden-badge" aria-live="polite"></div>
+    </div>
   </div>
 
   <div id="vignette" aria-hidden="true"></div>
@@ -43,8 +50,10 @@
   <div id="summary-overlay" aria-hidden="true">
     <div id="summary-label">GAME OVER</div>
     <div id="summary-score">0</div>
+    <div id="summary-chain"></div>
     <div id="summary-best">BEST: 0</div>
     <div id="summary-detail">LEVEL 1 · 0 WORDS</div>
+    <div id="summary-stats"></div>
     <div id="summary-restart">press any key to restart</div>
   </div>
 
