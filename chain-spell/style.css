@@ -306,11 +306,13 @@ body.levelup  #hard-mode-wrap,
 body.over     #hard-mode-wrap { opacity: 0.3; pointer-events: none; }
 
 #forbidden-badge {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.15em;
   color: var(--error);
-  min-width: 3ch;
+  min-height: 1.2em;
+  text-align: center;
+  margin-top: 4px;
 }
 #word-input.flash-forbidden { border-bottom-color: var(--error) !important; }
 

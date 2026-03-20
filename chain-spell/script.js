@@ -168,6 +168,7 @@ function acceptWord(word) {
     game.timerDuration = ceiling;
     game.timerEnd = performance.now() + ceiling;
     game.lastPulseSecond = 3;
+    if (hardModeCheck.checked) setForbiddenLetter();
   } else {
     // Subsequent words: reset timer + bonus (unless level-up fires below)
     const ceiling = timerCeiling(game.level);
@@ -232,20 +233,32 @@ function acceptWord(word) {
   spawnScorePop(bx, by, pts);
 }
 
+function setForbiddenLetter() {
+  const alphabet = 'abcdefghijklmnopqrstuvwxyz';
+  let pick;
+  do { pick = alphabet[Math.floor(Math.random() * 26)]; }
+  while (pick === game.requiredLetter);
+  game.forbiddenLetter = pick;
+  forbiddenBadge.textContent = `NO ${pick.toUpperCase()}`;
+  updateInputLabel();
+}
+
+function clearForbiddenLetter() {
+  game.forbiddenLetter = '';
+  forbiddenBadge.textContent = '';
+  updateInputLabel();
+}
+
+hardModeCheck.addEventListener('change', () => {
+  if (game.state !== STATE.PLAYING) return; // only during play
+  if (hardModeCheck.checked) setForbiddenLetter();
+  else clearForbiddenLetter();
+});
+
 function triggerLevelUp() {
-  // Hard Mode: set a new forbidden letter on multiples of 5 (levels 5, 10, 15…)
-  // game.level is already incremented by acceptWord() before this is called.
-  if (hardModeCheck.checked && game.level % 5 === 0) {
-    const alphabet = 'abcdefghijklmnopqrstuvwxyz';
-    let pick;
-    do { pick = alphabet[Math.floor(Math.random() * 26)]; }
-    while (pick === game.requiredLetter);
-    game.forbiddenLetter = pick;
-    forbiddenBadge.textContent = `NO ${pick.toUpperCase()}`;
-  } else if (!hardModeCheck.checked) {
-    // Clear only when Hard Mode is off — forbidden letter persists until next 5th-level trigger
-    game.forbiddenLetter = '';
-    forbiddenBadge.textContent = '';
+  // Hard Mode: refresh the forbidden letter on every level-up
+  if (hardModeCheck.checked) {
+    setForbiddenLetter();
   }
 
   setState(STATE.LEVELUP);
